@@ -1,0 +1,8 @@
+intelloptim
+Copyright 2026 Matteo Barbetti
+
+This product includes software developed by Matteo Barbetti.
+
+intelloptim builds on top of Optuna (https://optuna.org/), distributed
+under the MIT License, and is conceptually descended from Hopaas
+(Barbetti & Anderlini, 2023, arXiv:2301.05522).

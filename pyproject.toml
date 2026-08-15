@@ -1,0 +1,144 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelloptim"
+version = "0.1.0"
+description = "Client SDK and algorithm layer for the intelloptim black-box optimization service, built on Optuna's ask/tell with classical and quantum sampler interchangeability."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [
+    { name = "Matteo Barbetti", email = "matteo.barbetti.94@gmail.com" },
+]
+keywords = [
+    "optimization",
+    "hyperparameter",
+    "optuna",
+    "bayesian",
+    "quantum",
+    "distributed",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+
+# Base install = the SDK + the algorithm layer. `optuna` is now a genuine
+# runtime dependency (the `algorithms/` resolvers build Optuna samplers and
+# pruners); `numpy` backs the quantum sampler contract.
+dependencies = [
+    "pydantic>=2.6,<3",
+    "optuna>=4.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+# The REST/WS client SDK. `click` powers the evaluator CLI.
+client = [
+    "httpx>=0.27",
+    "click>=8.1",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "httpx>=0.27",
+    "respx>=0.21",
+    "ruff>=0.7",
+    "black>=24.10",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+]
+
+[project.scripts]
+intelloptim = "intelloptim.cli:main"
+intelloptim-worker = "intelloptim.worker.cli:main"
+
+# Plugin discovery group: third-party packages register additional samplers
+# (e.g. quantum implementations) here. The entry-point name must equal a
+# `core.samplers.base.SamplerKind` value; the callable resolves a spec to an
+# `optuna.samplers.BaseSampler`. Discovered by `intelloptim.algorithms`.
+[project.entry-points."intelloptim.samplers"]
+
+[project.urls]
+"Hopaas paper" = "https://arxiv.org/abs/2301.05522"
+# TODO: set to the public GitHub repository URL once published.
+Homepage = "https://arxiv.org/abs/2301.05522"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["intelloptim*"]
+
+[tool.setuptools.package-data]
+intelloptim = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Pyupgrade rules (UP) are deliberately omitted: per the project owner's
+# preference, code uses the explicit `typing.List/Dict/Optional/Union`
+# style rather than the PEP 585 / PEP 604 builtins-and-pipes form.
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # bugbear
+    "SIM", # simplify
+]
+ignore = [
+    "E501", # handled by black
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_decorators = false
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["optuna.*", "respx.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/intelloptim"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

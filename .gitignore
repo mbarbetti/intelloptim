@@ -1,0 +1,58 @@
+# GenAI tools
+.claude/settings*
+.impeccable/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+wheels/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Virtual envs (we use conda envs outside the repo, but keep these out anyway)
+.venv/
+venv/
+env/
+
+# Local dev
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+dev.db*
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# Docker / runtime
+.env
+.env.local
+*.pid
+
+# Logs
+*.log
+logs/

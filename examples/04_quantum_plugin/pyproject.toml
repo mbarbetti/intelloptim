@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intelloptim-dummy-quantum"
+version = "0.1.0"
+description = "Reference dummy quantum sampler plugin for intelloptim (entry-point wiring demo)."
+requires-python = ">=3.10"
+dependencies = [
+    "intelloptim",
+    "optuna>=3.6,<5",
+]
+
+# The entry-point name must match a SamplerKind value in
+# intelloptim.core.samplers.base.SamplerKind.  The server's
+# load_sampler_plugins() reads this group at startup and registers each
+# callable as the runtime resolver for that sampler kind.
+[project.entry-points."intelloptim.samplers"]
+quantum_qaoa = "intelloptim_dummy_quantum.sampler:resolve_qaoa"
+quantum_vqe = "intelloptim_dummy_quantum.sampler:resolve_vqe"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["intelloptim_dummy_quantum*"]
