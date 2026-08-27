@@ -68,10 +68,33 @@ class StudyRebuildingError(IntelloptimError):
         self.retry_after_seconds = retry_after_seconds
 
 
+class InsufficientQuotaError(IntelloptimError):
+    """Raised before :meth:`optimize` executes any trial when the requested
+    ``n_trials`` exceeds the caller's remaining monthly call budget.
+
+    This is a **client-side pre-flight check** using the quota snapshot
+    from the last ``GET /auth/me`` call (fetched lazily on
+    :meth:`Client.create_study`). It prevents obvious over-budget runs
+    without consuming any quota. The server enforces the limit
+    independently on each ``/ask`` and ``/tell`` call.
+    """
+
+
+class StudyLimitExceededError(IntelloptimError):
+    """Raised before :meth:`Client.create_study` contacts the server when
+    the caller has reached their active-study cap.
+
+    Delete an existing study to free a slot, or contact your admin to
+    upgrade your role. The server enforces the same limit independently.
+    """
+
+
 __all__ = [
     "ConfigDigestMismatchError",
+    "InsufficientQuotaError",
     "IntelloptimAPIError",
     "IntelloptimError",
+    "StudyLimitExceededError",
     "StudyNotFoundError",
     "StudyRebuildingError",
     "StudyStoppedError",

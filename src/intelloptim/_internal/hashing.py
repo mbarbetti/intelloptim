@@ -1,9 +1,12 @@
 """Canonical serialization and hashing for content-addressed studies.
 
-The federation contract — two clients on different infrastructures driving
-the same study by passing identical specs — depends on this module
-producing **byte-identical** output across Python versions, OS, and CPU
-architecture for equivalent inputs. The tests in
+Study identity uses an opaque per-entity ``study_key`` (a stable UUID4 hex
+string) rather than the raw API bearer token. The server resolves the token
+to the appropriate ``study_key`` (user-scoped or group-scoped) before
+calling :func:`study_identity`; the SDK never sees or stores the key.
+
+This module must produce **byte-identical** output across Python versions,
+OS, and CPU architecture for equivalent inputs. The tests in
 ``tests/unit/core/test_hashing.py`` are the authoritative spec; do not
 change the canonicalizer without updating them.
 
@@ -50,7 +53,7 @@ def canonicalize(value: Any) -> str:
 
 
 def study_id(
-    token: str,
+    study_key: str,
     name: str,
     parameters: Sequence[Mapping[str, Any]],
     sampler: Mapping[str, Any],
@@ -59,16 +62,17 @@ def study_id(
 ) -> str:
     """Compute the content-addressed study identifier.
 
-    Two clients that submit equivalent specs produce the same id; any
-    difference (parameter range, sampler kwarg, pruner config) produces a
-    different id by construction.
+    Two callers that submit equivalent specs with the same ``study_key``
+    produce the same id; any difference (parameter range, sampler kwarg,
+    pruner config, or key) produces a different id by construction.
 
-    The id is prefixed with ``suid:`` to leave room for algorithm
-    rotation. The token is mixed in so that two different users with
-    identical study specs do not collide.
+    The ``study_key`` is an opaque stable UUID4 assigned per-user or
+    per-group by the server. It isolates studies across users/groups
+    without embedding the raw bearer token in the hash.
 
     Args:
-        token: The caller's API token (raw, not hashed).
+        study_key: Opaque stable key (UUID4 hex) for the calling entity.
+            Supplied by the server; never the raw API token.
         name: Human-readable study label.
         parameters: Ordered sequence of parameter dicts; each must include
             ``kind`` plus type-specific fields.
@@ -81,7 +85,7 @@ def study_id(
         ``"suid:<hex>"`` — 69 characters total.
     """
     payload = {
-        "token": token,
+        "study_key": study_key,
         "name": name,
         "parameters": list(parameters),
         "sampler": dict(sampler),
@@ -113,32 +117,31 @@ def config_digest(
     return _digest(canonicalize(payload))
 
 
-def study_identity(token: str, request: "StudyResolveRequest") -> Tuple[str, str]:
+def study_identity(study_key: str, request: "StudyResolveRequest") -> Tuple[str, str]:
     """Compute ``(study_id, config_digest)`` from a resolve request.
 
-    This is the canonical way for *both* the client and the server to
-    derive the identifiers — they must agree byte-for-byte, so the
-    spec is always serialised through pydantic's ``model_dump(mode="json")``
-    before being fed into :func:`canonicalize`. Constructing the
-    canonical payload from raw dicts (where defaults like ``log=False``
-    are missing) produces a different hash
-    and is a bug.
+    This is the canonical entry point used **server-side** to derive
+    identifiers. The spec is always serialised through pydantic's
+    ``model_dump(mode="json")`` so that defaults like ``log=False`` are
+    present; constructing the payload from raw dicts produces a different
+    hash and is a bug.
 
     Args:
-        token: The caller's API token.
+        study_key: Opaque stable key for the calling entity (user or group).
+            Resolved server-side from the bearer token — never the raw token.
         request: A :class:`~intelloptim._internal.schemas.StudyResolveRequest`
             (or any object with the same shape).
 
     Returns:
-        ``(study_id, config_digest)``. ``study_id`` mixes in the token;
-        ``config_digest`` does not.
+        ``(study_id, config_digest)``. ``study_id`` mixes in the
+        ``study_key``; ``config_digest`` does not.
     """
     parameters = [p.model_dump(mode="json") for p in request.parameters]
     sampler = request.sampler.model_dump(mode="json")
     pruner = request.pruner.model_dump(mode="json")
     direction = request.direction
     sid = study_id(
-        token=token,
+        study_key=study_key,
         name=request.name,
         parameters=parameters,
         sampler=sampler,

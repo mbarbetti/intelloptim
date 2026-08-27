@@ -89,9 +89,12 @@ class TestCanonicalize:
 
 
 class TestStudyId:
-    def _spec(self):
+    _KEY_A = "aabbccddeeff00112233445566778899"
+    _KEY_B = "99887766554433221100ffeeddccbbaa"
+
+    def _spec(self, study_key: str = _KEY_A):
         return {
-            "token": "tok_abc",
+            "study_key": study_key,
             "name": "demo",
             "parameters": [
                 {"kind": "float", "name": "x", "low": -1.0, "high": 1.0},
@@ -111,11 +114,16 @@ class TestStudyId:
         assert sid.startswith("suid:")
         assert len(sid) == len("suid:") + 64
 
-    def test_token_change_changes_id(self) -> None:
-        a = study_id(**self._spec())
-        s = self._spec()
-        s["token"] = "tok_other"
-        b = study_id(**s)
+    def test_same_study_key_same_id(self) -> None:
+        """Two different callers with the same study_key produce the same id."""
+        a = study_id(**self._spec(self._KEY_A))
+        b = study_id(**self._spec(self._KEY_A))
+        assert a == b
+
+    def test_different_study_key_different_id(self) -> None:
+        """Different study_keys (different users/groups) produce different ids."""
+        a = study_id(**self._spec(self._KEY_A))
+        b = study_id(**self._spec(self._KEY_B))
         assert a != b
 
     def test_param_range_change_changes_id(self) -> None:
@@ -150,7 +158,7 @@ class TestStudyId:
             "sampler": s_natural["sampler"],
             "parameters": s_natural["parameters"],
             "name": s_natural["name"],
-            "token": s_natural["token"],
+            "study_key": s_natural["study_key"],
         }
         assert study_id(**s_natural) == study_id(**s_reordered)
 
@@ -170,6 +178,7 @@ class TestConfigDigest:
         params = [{"kind": "float", "name": "x", "low": 0.0, "high": 1.0}]
         sampler = {"kind": "tpe"}
         pruner = {"kind": "nop"}
-        sid = study_id("tok", "demo", params, sampler, pruner, "minimize")
+        key = "aabbccddeeff00112233445566778899"
+        sid = study_id(key, "demo", params, sampler, pruner, "minimize")
         digest = config_digest(params, sampler, pruner, "minimize")
         assert sid != digest

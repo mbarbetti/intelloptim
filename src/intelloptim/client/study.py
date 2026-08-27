@@ -36,6 +36,7 @@ from intelloptim._internal.schemas import (
     EnqueueResponse,
     TellRequest,
 )
+from intelloptim.client.errors import InsufficientQuotaError
 from intelloptim.client.trial import Trial
 from intelloptim.core.trial import TrialState
 
@@ -210,7 +211,36 @@ class StudyHandle:
             catch: Exception class to treat as a recoverable trial
                 failure. Default :class:`Exception`. Use ``catch=None``
                 to disable.
+
+        Raises:
+            InsufficientQuotaError: ``n_trials`` exceeds the remaining
+                monthly budget (pre-flight check; no server calls made).
         """
+        who = self._client._who_am_i
+        if who is not None:
+            remaining = (
+                who.group_calls_remaining
+                if who.is_group_context
+                else who.calls_remaining
+            )
+            if remaining is not None and n_trials > remaining:
+                ctx = (
+                    f"group '{who.group_name}'"
+                    if who.is_group_context
+                    else f"role '{who.role_name}'"
+                )
+                resets = (
+                    f" Quota resets on {who.period_resets_at}."
+                    if who.period_resets_at
+                    else ""
+                )
+                raise InsufficientQuotaError(
+                    f"Requested {n_trials} trials but only {remaining} "
+                    f"ask/tell call(s) remain in your {ctx} budget this "
+                    f"month.{resets} Reduce n_trials or contact your admin "
+                    "to raise the quota."
+                )
+
         for _ in range(n_trials):
             trial = self.ask()
             try:

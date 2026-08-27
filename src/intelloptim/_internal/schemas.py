@@ -10,29 +10,19 @@ update the corresponding consumers.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from intelloptim.core.parameters import Categorical, Float, Int
-from intelloptim.core.pruners import MedianPruner, NopPruner
-from intelloptim.core.samplers.classical import TPE
-from intelloptim.core.samplers.quantum._stubs import QuantumQAOA, QuantumVQE
-from intelloptim.core.samplers.remote import RemoteRandom
+from intelloptim.core.pruners import PrunerSpec
+from intelloptim.core.samplers import SamplerSpec
 from intelloptim.core.trial import TrialState
 
 API_VERSION = "v1"
 
 ParameterSpec = Annotated[Union[Float, Int, Categorical], Field(discriminator="kind")]
 """Discriminated union of parameter declarations (tagged by ``kind``)."""
-
-SamplerSpec = Annotated[
-    Union[TPE, RemoteRandom, QuantumQAOA, QuantumVQE], Field(discriminator="kind")
-]
-"""Discriminated union of sampler declarations (tagged by ``kind``)."""
-
-PrunerSpec = Annotated[Union[NopPruner, MedianPruner], Field(discriminator="kind")]
-"""Discriminated union of pruner declarations (tagged by ``kind``)."""
 
 
 class StudyResolveRequest(BaseModel):
@@ -112,6 +102,33 @@ class EnqueueResponse(BaseModel):
     state: TrialState
 
 
+class WhoAmIResponse(BaseModel):
+    """Response from ``GET /auth/me`` as seen by the SDK (bearer-token path).
+
+    The server returns additional fields (``is_admin``, ``study_key``, etc.)
+    that are ignored here; ``extra="ignore"`` prevents validation errors when
+    the server adds new fields.
+
+    ``calls_remaining`` and ``group_calls_remaining`` are ``None`` when the
+    applicable budget is unlimited. ``period_resets_at`` is ``None`` when the
+    quota is unlimited (no monthly rollover applies).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    email: str
+    is_active: bool
+    role_name: Optional[str] = None
+    calls_remaining: Optional[int] = None
+    active_studies: int = 0
+    max_active_studies: Optional[int] = None
+    period_resets_at: Optional[str] = None
+    is_group_context: bool = False
+    group_name: Optional[str] = None
+    group_calls_remaining: Optional[int] = None
+
+
 __all__ = [
     "API_VERSION",
     "AskRequest",
@@ -125,4 +142,5 @@ __all__ = [
     "StudyResolveResponse",
     "TellRequest",
     "TellResponse",
+    "WhoAmIResponse",
 ]

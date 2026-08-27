@@ -21,33 +21,39 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import httpx
 
-from intelloptim._internal.hashing import study_identity
+from intelloptim._internal.hashing import config_digest as _config_digest
+from intelloptim._internal.logging import get_logger
 from intelloptim._internal.schemas import (
     StudyResolveRequest,
     StudyResolveResponse,
+    WhoAmIResponse,
 )
 from intelloptim.client.auth import resolve_token
 from intelloptim.client.errors import (
     ConfigDigestMismatchError,
+    InsufficientQuotaError,
     IntelloptimAPIError,
+    StudyLimitExceededError,
     StudyNotFoundError,
     StudyRebuildingError,
     StudyStoppedError,
     TrialNotFoundError,
 )
 from intelloptim.core.parameters import Parameter
-from intelloptim.core.pruners import NopPruner, Pruner
+from intelloptim.core.pruners import NopPrunerSpec, PrunerSpec
+
+_log = get_logger(__name__)
 
 if TYPE_CHECKING:
     from intelloptim.client.study import StudyHandle
-    from intelloptim.core.samplers.classical import TPE
-    from intelloptim.core.samplers.quantum._stubs import (
+    from intelloptim.core.samplers import (
+        TPESamplerSpec,
+        SASamplerSpec,
         QuantumQAOA,
         QuantumVQE,
     )
-    from intelloptim.core.samplers.remote import RemoteRandom
 
-    SamplerSpecType = TPE | RemoteRandom | QuantumQAOA | QuantumVQE
+    SamplerSpecType = TPESamplerSpec | SASamplerSpec | QuantumQAOA | QuantumVQE
 
 DEFAULT_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 
@@ -80,6 +86,7 @@ class Client:
     ) -> None:
         self._url = url.rstrip("/")
         self._token = resolve_token(token)
+        self._who_am_i: Optional[WhoAmIResponse] = None
         if http_client is not None:
             self._http = http_client
             self._owns_http = False
@@ -122,36 +129,50 @@ class Client:
         direction: str,
         sampler: "SamplerSpecType",
         parameters: List[Parameter],
-        pruner: Optional[Pruner] = None,
+        pruner: Optional[PrunerSpec] = None,
     ) -> "StudyHandle":
         """Resolve a study spec to a :class:`StudyHandle`.
 
         Idempotent — calling :func:`create_study` with the same args from
-        any process yields the same ``study_id`` (content-addressed).
+        any process that shares the same user or group identity yields the
+        same ``study_id``. The server is the sole authority on study
+        identity; no local hash agreement check is performed.
+
+        Raises:
+            StudyLimitExceededError: The caller has reached their
+                active-study cap (pre-flight check; no server call made).
         """
         from intelloptim.client.study import StudyHandle  # late: cycles
+
+        who = self._fetch_who_am_i()
+        if (
+            who.max_active_studies is not None
+            and who.active_studies >= who.max_active_studies
+        ):
+            raise StudyLimitExceededError(
+                f"Active study limit reached ({who.active_studies}/"
+                f"{who.max_active_studies}). "
+                "Delete an existing study to free a slot, or contact your "
+                "admin to upgrade your role."
+            )
 
         request = StudyResolveRequest(
             name=name,
             direction=direction,
             parameters=list(parameters),
             sampler=sampler,
-            pruner=pruner or NopPruner(),
+            pruner=pruner or NopPrunerSpec(),
         )
-        local_study_id, local_digest = study_identity(self._token, request)
+        # Compute config_digest locally (no token in this digest).
+        params_dicts = [p.model_dump(mode="json") for p in request.parameters]
+        local_digest = _config_digest(
+            parameters=params_dicts,
+            sampler=request.sampler.model_dump(mode="json"),
+            pruner=request.pruner.model_dump(mode="json"),
+            direction=request.direction,
+        )
         response = self._post_json("/studies/resolve", request.model_dump(mode="json"))
         result = StudyResolveResponse.model_validate(response.json())
-        if result.study_id != local_study_id:
-            # Server disagrees about the hash — almost certainly a
-            # canonicalization bug on one side. Fail loudly rather than
-            # carrying on with a mystery study.
-            raise IntelloptimAPIError(
-                response.status_code,
-                detail=(
-                    f"server returned study_id {result.study_id!r}, "
-                    f"client computed {local_study_id!r}"
-                ),
-            )
         return StudyHandle(
             client=self,
             study_id=result.study_id,
@@ -162,6 +183,46 @@ class Client:
 
     # Optuna-flavoured alias.
     study = create_study
+
+    # ------------------------------------------------------------------
+    # identity / quota (internal)
+    # ------------------------------------------------------------------
+
+    def _fetch_who_am_i(self) -> WhoAmIResponse:
+        """Fetch and cache the caller's identity and quota snapshot.
+
+        Called lazily on the first :meth:`create_study`. Logs a WARNING
+        when the caller is operating under a limited budget so they are
+        aware before any trials are consumed.
+        """
+        if self._who_am_i is not None:
+            return self._who_am_i
+        response = self._get("/auth/me")
+        who = WhoAmIResponse.model_validate(response.json())
+        self._who_am_i = who
+        if who.is_group_context:
+            if who.group_calls_remaining is not None:
+                _log.warning(
+                    "Group '%s': %d ask/tell call(s) remaining in the shared "
+                    "pool this month. Resets %s.",
+                    who.group_name,
+                    who.group_calls_remaining,
+                    who.period_resets_at or "N/A",
+                )
+            else:
+                _log.info(
+                    "Operating in group context '%s' (unlimited budget).",
+                    who.group_name,
+                )
+        elif who.calls_remaining is not None:
+            _log.warning(
+                "Role '%s': %d ask/tell call(s) remaining this month. "
+                "Resets %s. Contact your admin to extend the quota.",
+                who.role_name,
+                who.calls_remaining,
+                who.period_resets_at or "N/A",
+            )
+        return who
 
     # ------------------------------------------------------------------
     # request plumbing (internal; used by StudyHandle)

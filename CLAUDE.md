@@ -73,12 +73,17 @@ src/intelloptim/
   the body; **409** on mismatch → `ConfigDigestMismatchError`.
 - **503 + `Retry-After`** from `/ask` → `StudyRebuildingError`.
 - **`/ask` and `/enqueue` return 410** when STOPPED → `StudyStoppedError`.
-- Study identity: `study_id = sha256(token, name, canonicalized_params,
+- **429** from `/ask` or `/tell` → quota exhausted for this period.
+- Study identity: `study_id = sha256(study_key, name, canonicalized_params,
   sampler_spec, pruner_spec, direction)` — always via
-  `study_identity(token, request)`. Token rotation starts a fresh study
-  (raw token mixes into the hash — intentional; do not hash on `user_id`).
-- `Client.create_study` double-checks the server-returned `study_id`
-  against the locally-computed one.
+  `study_identity(study_key, request)`. `study_key` is an opaque UUID4 per
+  user (or group) resolved server-side; multiple tokens owned by the same
+  user always produce the same `study_id` for the same spec.
+- `Client.create_study` accepts the server-returned `study_id` directly —
+  no local recomputation or agreement check (server is authoritative).
+- `GET /auth/me` is called lazily on first `create_study`; the response is
+  cached in `Client._who_am_i` (`WhoAmIResponse`) for quota pre-flight
+  checks. A `WARNING` is logged when the budget is limited.
 
 ## Sampler plugin contract
 
@@ -113,6 +118,20 @@ with intopt.Client(url="...", token=...) as client:
 - `tell(state=COMPLETE)` requires `value`; `PRUNED`/`FAILED` accept `None`.
 - `create_study` is idempotent and parallel-safe; `best_trial` is `None`
   until at least one trial completes.
+- `optimize(n_trials=N)` raises `InsufficientQuotaError` before any server
+  call if `N > calls_remaining` (pre-flight from cached `/auth/me`).
+- `create_study` raises `StudyLimitExceededError` before posting if the user
+  is at the active-study cap (pre-flight from cached `/auth/me`).
+
+## Error taxonomy (client-side)
+
+| Error | When |
+|---|---|
+| `ConfigDigestMismatchError` | 409 — study config drifted between clients |
+| `StudyRebuildingError` | 503 — sampler rebuild in progress |
+| `StudyStoppedError` | 410 — study is stopped |
+| `InsufficientQuotaError` | Pre-flight: n_trials > calls_remaining |
+| `StudyLimitExceededError` | Pre-flight: at active-study cap |
 
 ## Testing
 
@@ -134,9 +153,10 @@ no comments unless *why* is non-obvious. Keep `mypy --strict` clean.
 
 - `_internal/hashing.py` + `study_identity` (federation breaks silently)
 - `_internal/schemas.py` wire models (versioned change; bump `API_VERSION`)
-- `core/samplers/quantum/_stubs.py`; the Optuna study-name → `study_id`
-  convention; `Client.create_study` `study_id` agreement check
-- Token-based `study_id` hash (user-based silently breaks federation)
+- `core/samplers/quantum/_stubs.py`; the Optuna study-name → `study_id` convention
+- `study_identity` signature — takes `study_key: str` (opaque UUID4), NOT a
+  raw bearer token. The `study_key` is resolved server-side from the token.
+  Swapping back to raw-token hashing silently breaks federation.
 
 ## Common commands
 
