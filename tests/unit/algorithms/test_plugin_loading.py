@@ -8,13 +8,13 @@ from unittest.mock import MagicMock, patch
 import optuna
 import pytest
 
+from intelloptim.algorithms.errors import SamplerNotImplementedError
 from intelloptim.algorithms.samplers import (
     _RESOLVERS,
-    SamplerNotImplementedError,
     load_sampler_plugins,
     resolve_sampler,
 )
-from intelloptim.core.samplers.quantum._stubs import QuantumQAOA, QuantumVQE
+from intelloptim.core.samplers.quantum import QuantumQAOA, QuantumVQE
 
 
 def _make_ep(name: str, func: Any) -> MagicMock:

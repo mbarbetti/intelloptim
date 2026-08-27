@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from intelloptim.core.parameters import Categorical, Float, Int
-from intelloptim.core.pruners import MedianPruner, NopPruner
-from intelloptim.core.samplers.classical import TPE
+from intelloptim.core.pruners import MedianPrunerSpec, NopPrunerSpec
+from intelloptim.core.samplers.optuna import TPESamplerSpec
 from intelloptim.core.samplers.quantum import QuantumQAOA
 from intelloptim.core.study import Direction, StudySpec
 
@@ -18,11 +18,11 @@ class TestStudySpec:
             name="demo",
             direction=Direction.MINIMIZE,
             parameters=[Float("x", -1.0, 1.0)],
-            sampler=TPE(),
+            sampler=TPESamplerSpec(),
         )
         assert spec.name == "demo"
         assert spec.direction is Direction.MINIMIZE
-        assert isinstance(spec.pruner, NopPruner)
+        assert isinstance(spec.pruner, NopPrunerSpec)
 
     def test_full(self) -> None:
         spec = StudySpec(
@@ -33,11 +33,11 @@ class TestStudySpec:
                 Int("n_layers", 1, 10),
                 Categorical("activation", ["relu", "tanh"]),
             ],
-            sampler=TPE(seed=42),
-            pruner=MedianPruner(n_warmup_steps=5),
+            sampler=TPESamplerSpec(seed=42),
+            pruner=MedianPrunerSpec(n_warmup_steps=5),
         )
         assert len(spec.parameters) == 3
-        assert isinstance(spec.pruner, MedianPruner)
+        assert isinstance(spec.pruner, MedianPrunerSpec)
 
     def test_quantum_sampler_accepted(self) -> None:
         spec = StudySpec(
@@ -55,5 +55,5 @@ class TestStudySpec:
                 name="bad",
                 direction=Direction.MINIMIZE,
                 parameters=[Float("x", 0.0, 1.0), Float("x", 1.0, 2.0)],
-                sampler=TPE(),
+                sampler=TPESamplerSpec(),
             )

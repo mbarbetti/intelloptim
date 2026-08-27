@@ -18,8 +18,8 @@ from intelloptim._internal.schemas import (
     TellRequest,
 )
 from intelloptim.core.parameters import Float, Int
-from intelloptim.core.pruners import NopPruner
-from intelloptim.core.samplers.classical import TPE
+from intelloptim.core.pruners import NopPrunerSpec
+from intelloptim.core.samplers.optuna import TPESamplerSpec
 from intelloptim.core.samplers.quantum import QuantumQAOA
 from intelloptim.core.trial import TrialState
 
@@ -33,8 +33,8 @@ def test_resolve_request_round_trip() -> None:
         name="demo",
         direction="minimize",
         parameters=[Float("x", 0.0, 1.0), Int("n", 1, 10)],
-        sampler=TPE(seed=42),
-        pruner=NopPruner(),
+        sampler=TPESamplerSpec(seed=42),
+        pruner=NopPrunerSpec(),
     )
     revived = StudyResolveRequest.model_validate(req.model_dump(mode="json"))
     assert revived == req
@@ -46,7 +46,7 @@ def test_resolve_request_with_quantum_sampler() -> None:
         direction="minimize",
         parameters=[Float("x", 0.0, 1.0)],
         sampler=QuantumQAOA(reps=2),
-        pruner=NopPruner(),
+        pruner=NopPrunerSpec(),
     )
     dumped = req.model_dump(mode="json")
     assert dumped["sampler"]["kind"] == "quantum_qaoa"
@@ -128,5 +128,5 @@ def test_parameter_spec_discriminator_round_trip() -> None:
 def test_sampler_spec_discriminator_round_trip() -> None:
     adapter = TypeAdapter(SamplerSpec)
     s = adapter.validate_python({"kind": "tpe", "seed": 7})
-    assert isinstance(s, TPE)
+    assert isinstance(s, TPESamplerSpec)
     assert s.seed == 7

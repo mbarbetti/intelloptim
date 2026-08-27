@@ -18,9 +18,12 @@ from typing import Annotated, List, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from intelloptim.core.parameters import Parameter
-from intelloptim.core.pruners import NopPruner, Pruner
-from intelloptim.core.samplers.classical import TPE
-from intelloptim.core.samplers.quantum._stubs import QuantumQAOA, QuantumVQE
+from intelloptim.core.pruners import NopPrunerSpec, PrunerSpec
+from intelloptim.core.samplers import (
+    TPESamplerSpec, 
+    QuantumQAOA, 
+    QuantumVQE,
+)
 
 
 class Direction(str, Enum):
@@ -34,7 +37,7 @@ class Direction(str, Enum):
 # kept narrow on purpose so adding a sampler is a deliberate two-line change
 # (here and in `_internal.schemas`).
 StudySampler = Annotated[
-    Union[TPE, QuantumQAOA, QuantumVQE], Field(discriminator="kind")
+    Union[TPESamplerSpec, QuantumQAOA, QuantumVQE], Field(discriminator="kind")
 ]
 
 
@@ -59,7 +62,7 @@ class StudySpec(BaseModel):
     direction: Direction
     parameters: List[Parameter]
     sampler: StudySampler
-    pruner: Pruner = NopPruner()
+    pruner: PrunerSpec = NopPrunerSpec()
 
     @model_validator(mode="after")
     def _check_unique_param_names(self) -> "StudySpec":

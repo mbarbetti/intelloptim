@@ -27,14 +27,14 @@ def test_params_namespace() -> None:
 def test_pruners_namespace() -> None:
     import intelloptim as intopt
 
-    assert intopt.pruners.NopPruner().kind.value == "nop"
-    assert intopt.pruners.MedianPruner(n_warmup_steps=3).n_warmup_steps == 3
+    assert intopt.pruners.NopPrunerSpec().kind.value == "nop"
+    assert intopt.pruners.MedianPrunerSpec(n_warmup_steps=3).n_warmup_steps == 3
 
 
 def test_samplers_namespace_classical() -> None:
     import intelloptim as intopt
 
-    s = intopt.samplers.TPE(seed=42)
+    s = intopt.samplers.TPESamplerSpec(seed=42)
     assert s.seed == 42
     assert s.runs_remote is False
 

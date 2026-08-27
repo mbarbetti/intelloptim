@@ -19,7 +19,8 @@ Public surface:
 
 from typing import TYPE_CHECKING, Any
 
-from intelloptim import params, pruners, samplers
+from . import params, algorithms
+from intelloptim.core import pruners, samplers
 from intelloptim.core.objective import objective
 from intelloptim.core.trial import TrialState
 from intelloptim.version import __version__
@@ -50,4 +51,5 @@ __all__ = [
     "params",
     "pruners",
     "samplers",
+    "algorithms",
 ]
