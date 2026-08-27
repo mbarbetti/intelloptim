@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from intelloptim.core.samplers import RebuildPolicy, SamplerKind
-from intelloptim.core.samplers.classical import TPE
+from intelloptim.core.samplers import SamplerKind
+from intelloptim.core.samplers.base import RebuildPolicy
+from intelloptim.core.samplers.optuna import TPESampler as TPE
 from intelloptim.core.samplers.quantum import QuantumQAOA, QuantumVQE
 
 

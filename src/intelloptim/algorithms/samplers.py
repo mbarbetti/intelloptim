@@ -1,62 +1,94 @@
-"""Resolve a :class:`~intelloptim.core.samplers.base.Sampler` spec to a
-concrete :class:`optuna.samplers.BaseSampler` instance.
+"""Spec-to-Optuna resolution and plugin discovery for samplers.
 
-The resolver lives in the public algorithm layer (not in ``core/``) — it
-imports Optuna's algorithm classes, which we intentionally keep out of
-``core/``. Each spec ``kind`` maps to one Optuna sampler class via the
-registry below; adding a new built-in sampler is a single-line change here
-plus a spec class in ``core.samplers.classical``.
+Two public names are exported:
+
+- :func:`resolve_sampler` — instantiate an Optuna sampler from a
+  :class:`~intelloptim.core.samplers.base.BaseSampler` spec.
+- :func:`load_sampler_plugins` — discover and register plugins from the
+  ``intelloptim.samplers`` entry-point group (called once at server startup).
+
+The plugin protocol (:class:`~intelloptim.algorithms.protocols.SamplerPlugin`)
+and runtime errors (:class:`~intelloptim.algorithms.errors.SamplerNotImplementedError`)
+live in their own modules.
+
+Adding a built-in sampler requires a spec class in
+:mod:`intelloptim.core.samplers.optuna` and a single resolver entry in
+``_RESOLVERS`` below.
 """
 
 from __future__ import annotations
 
 from importlib.metadata import entry_points
-from typing import Any, Callable, Dict, Union
+from typing import Any, Callable, Dict
 
 import optuna
 
 from intelloptim._internal.logging import get_logger
-from intelloptim.core.samplers.base import SamplerKind
-from intelloptim.core.samplers.classical import TPE
-from intelloptim.core.samplers.quantum._stubs import QuantumQAOA, QuantumVQE
-from intelloptim.core.samplers.remote import RemoteRandom
+from intelloptim.algorithms.backend import SASampler
+from intelloptim.algorithms.errors import SamplerNotImplementedError
+from intelloptim.core.samplers import (
+    GPSamplerSpec,
+    NSGAIISamplerSpec,
+    QMCSamplerSpec,
+    RandomSamplerSpec,
+    SamplerSpec,
+    SamplerKind,
+    SASamplerSpec,
+    TPESamplerSpec,
+    QuantumQAOA,
+    QuantumVQE,
+)
 
 _log = get_logger(__name__)
 
-ConcreteSampler = Union[TPE, RemoteRandom, QuantumQAOA, QuantumVQE]
-"""Concrete (non-abstract) sampler spec union accepted by :func:`resolve_sampler`.
 
-Mirrors :data:`intelloptim._internal.schemas.SamplerSpec` but without the
-pydantic ``Annotated[..., Field(discriminator=...)]`` wrapping, so the
-type is usable in this module's function signatures without pulling in
-schemas.
-"""
+def _resolve_random(spec: RandomSamplerSpec) -> optuna.samplers.BaseSampler:
+    return optuna.samplers.RandomSampler(seed=spec.seed)
 
 
-class SamplerNotImplementedError(NotImplementedError):
-    """Raised when no plugin is registered for a sampler kind.
-
-    Carries a pointer to the plugin documentation so the user knows what
-    to install or implement next.
-    """
-
-
-def _resolve_tpe(spec: TPE) -> optuna.samplers.BaseSampler:
+def _resolve_tpe(spec: TPESamplerSpec) -> optuna.samplers.BaseSampler:
     return optuna.samplers.TPESampler(
         seed=spec.seed,
         n_startup_trials=spec.n_startup_trials,
         n_ei_candidates=spec.n_ei_candidates,
         multivariate=spec.multivariate,
+        group=spec.group,
     )
 
 
-def _resolve_remote_random(spec: RemoteRandom) -> optuna.samplers.BaseSampler:
-    """RemoteRandom is algorithmically Random; the "remote" part is the
-    Celery dispatch, not the sampling logic. The orchestrator and the
-    optimizer worker both call this resolver — the only difference is
-    *where* the resulting sampler runs.
-    """
-    return optuna.samplers.RandomSampler(seed=spec.seed)
+def _resolve_gp(spec: GPSamplerSpec) -> optuna.samplers.BaseSampler:
+    return optuna.samplers.GPSampler(
+        seed=spec.seed,
+        n_startup_trials=spec.n_startup_trials,
+        deterministic_objective=spec.deterministic_objective,
+    )
+
+
+def _resolve_nsga2(spec: NSGAIISamplerSpec) -> optuna.samplers.BaseSampler:
+    return optuna.samplers.NSGAIISampler(
+        population_size=spec.population_size,
+        mutation_prob=spec.mutation_prob,
+        crossover_prob=spec.crossover_prob,
+        swapping_prob=spec.swapping_prob,
+        seed=spec.seed,
+    )
+
+
+def _resolve_qmc(spec: QMCSamplerSpec) -> optuna.samplers.BaseSampler:
+    return optuna.samplers.QMCSampler(
+        qmc_type=spec.qmc_type,
+        scramble=spec.scramble,
+        seed=spec.seed,
+    )
+
+
+def _resolve_sa(spec: SASamplerSpec) -> optuna.samplers.BaseSampler:
+    return SASampler(
+        temperature=spec.temperature,
+        cooldown_factor=spec.cooldown_factor,
+        neighbor_range_factor=spec.neighbor_range_factor,
+        seed=spec.seed,
+    )
 
 
 def _resolve_quantum_unimplemented(
@@ -72,11 +104,39 @@ def _resolve_quantum_unimplemented(
 
 
 _RESOLVERS: Dict[SamplerKind, Callable[[Any], optuna.samplers.BaseSampler]] = {
+    SamplerKind.RANDOM: _resolve_random,
     SamplerKind.TPE: _resolve_tpe,
-    SamplerKind.REMOTE_RANDOM: _resolve_remote_random,
+    SamplerKind.GP: _resolve_gp,
+    SamplerKind.NSGA2: _resolve_nsga2,
+    SamplerKind.QMC: _resolve_qmc,
+    SamplerKind.SA: _resolve_sa,
     SamplerKind.QUANTUM_QAOA: _resolve_quantum_unimplemented,
     SamplerKind.QUANTUM_VQE: _resolve_quantum_unimplemented,
 }
+
+
+def resolve_sampler(spec: SamplerSpec) -> optuna.samplers.BaseSampler:
+    """Instantiate the Optuna sampler corresponding to *spec*.
+
+    Args:
+        spec: A declarative sampler spec (built-in or registered plugin).
+
+    Returns:
+        A fresh Optuna :class:`~optuna.samplers.BaseSampler` instance
+        ready to plug into ``optuna.create_study(...)``.
+
+    Raises:
+        SamplerNotImplementedError: If the spec is for a sampler kind
+            with no registered runtime implementation (currently the
+            quantum stubs).
+    """
+    try:
+        resolver = _RESOLVERS[spec.kind]
+    except KeyError as exc:
+        raise SamplerNotImplementedError(
+            f"Unknown sampler kind: {spec.kind!r}"
+        ) from exc
+    return resolver(spec)
 
 
 def load_sampler_plugins() -> None:
@@ -115,28 +175,4 @@ def load_sampler_plugins() -> None:
         _log.info("sampler plugin registered", extra={"kind": ep.name})
 
 
-def resolve_sampler(spec: ConcreteSampler) -> optuna.samplers.BaseSampler:
-    """Instantiate the Optuna sampler corresponding to *spec*.
-
-    Args:
-        spec: A declarative sampler spec (built-in or registered plugin).
-
-    Returns:
-        A fresh Optuna :class:`~optuna.samplers.BaseSampler` instance
-        ready to plug into ``optuna.create_study(...)``.
-
-    Raises:
-        SamplerNotImplementedError: If the spec is for a sampler kind
-            with no registered runtime implementation (currently the
-            quantum stubs).
-    """
-    try:
-        resolver = _RESOLVERS[spec.kind]
-    except KeyError as exc:
-        raise SamplerNotImplementedError(
-            f"Unknown sampler kind: {spec.kind!r}"
-        ) from exc
-    return resolver(spec)
-
-
-__all__ = ["SamplerNotImplementedError", "load_sampler_plugins", "resolve_sampler"]
+__all__ = ["resolve_sampler", "load_sampler_plugins"]

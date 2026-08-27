@@ -19,32 +19,24 @@ from __future__ import annotations
 
 from typing import ClassVar, Literal, Optional
 
-from pydantic import Field
+from intelloptim.core.samplers.base import (
+    SamplerKind,
+    RebuildPolicy,
+    BaseSamplerSpec,
+    BaseRebuildSamplerSpec,
+)
 
-from intelloptim.core.samplers.base import RebuildPolicy, Sampler, SamplerKind
 
-
-class RemoteRandom(Sampler):
-    """Random sampler dispatched via the optimizer-worker plane.
-
-    Args:
-        seed: Random seed for reproducibility. ``None`` lets Optuna's
-            ``RandomSampler`` pick.
-        rebuild_every: Override the class-level rebuild trigger. When
-            set, the orchestrator schedules a rebuild after every N
-            completed tells; ``None`` keeps the default policy.
-    """
-
-    kind: Literal[SamplerKind.REMOTE_RANDOM] = SamplerKind.REMOTE_RANDOM
-
+class SASamplerSpec(BaseSamplerSpec):
+    kind: Literal[SamplerKind.SA] = SamplerKind.SA
+    
     seed: Optional[int] = None
-    rebuild_every: Optional[int] = Field(default=None, gt=0)
+    n_startup_trials: int = 10
+    temperature: float = 100.0
+    cooldown_factor: float = 0.9
+    neighbor_range_factor: float = 0.1
+    
+    runs_remote: ClassVar[bool] = False
 
-    runs_remote: ClassVar[bool] = True
 
-    rebuild_policy: ClassVar[RebuildPolicy] = RebuildPolicy(
-        every_n_tells=10, every_seconds=None, on_demand=True
-    )
-
-
-__all__ = ["RemoteRandom"]
+__all__ = ["SASamplerSpec"]

@@ -16,11 +16,10 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from intelloptim.core.samplers.base import SamplerKind
-from intelloptim.core.samplers.quantum.base import QuantumSampler
+from intelloptim.core.samplers.base import SamplerKind, BaseRebuildSamplerSpec
 
 
-class QuantumQAOA(QuantumSampler):
+class QuantumQAOA(BaseRebuildSamplerSpec):
     """Quantum Approximate Optimization Algorithm sampler spec.
 
     Reference: Farhi, Goldstone & Gutmann, *A Quantum Approximate
@@ -45,7 +44,7 @@ class QuantumQAOA(QuantumSampler):
     seed: Optional[int] = None
 
 
-class QuantumVQE(QuantumSampler):
+class QuantumVQE(BaseRebuildSamplerSpec):
     """Variational Quantum Eigensolver sampler spec.
 
     Used as a sampler over discrete search spaces by encoding parameter
