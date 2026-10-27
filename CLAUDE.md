@@ -29,28 +29,40 @@ The **shared source of truth lives here, in the public repo**:
 - `_internal/hashing.py` — `study_identity` / content-addressed `study_id`
   + `config_digest`. **Byte-stable** across processes or federation breaks
   silently.
-- the sampler union (declared in `core/study.py`, `_internal/schemas.py`,
-  and `algorithms/samplers.py:ConcreteSampler`).
+- the sampler union `SamplerSpec` (`core/samplers/__init__.py`, consumed by
+  `_internal/schemas.py`) and the pruner union `PrunerSpec`
+  (`core/pruners/__init__.py`).
 
 Changing any of these is a **coordinated, versioned event**: bump
 `API_VERSION`, and update the server (which imports these) and the web app
 (which mirrors the wire types by hand). Adding a new sampler *kind* touches
-`SamplerKind` + `SamplerSpec` + `ConcreteSampler` — all three now live in
-*this* repo, so it's a single-repo change here, then a server bump.
+`SamplerKind` + `SamplerSpec` + `_RESOLVERS` — all live in *this* repo, so
+it's a single-repo change here, then a server bump.
 
 ## Mental map
 
 ```
 src/intelloptim/
   _internal/      wire schemas, hashing (federation-critical), logging, audit
-  core/           pure domain types (parameters, trial, study, pruners,
-                  objective, samplers/) — no I/O, only pydantic
+  core/           pure domain types — no I/O, only pydantic
+    samplers/       base.py (SamplerKind, rebuild policy, base specs),
+                    optuna.py (Random/TPE/GP/NSGA-II/QMC specs),
+                    builtin.py (SA/OWG specs), quantum.py (QAOA/VQE stubs)
+    pruners/        base.py (PrunerKind), optuna.py (Median/Percentile/
+                    Threshold/Nop specs)
+    parameters.py, trial.py (TrialState), objective.py
   algorithms/     spec -> optuna resolvers (samplers.py, pruners.py) +
                   load_sampler_plugins() entry-point discovery. Needs optuna.
+    backend/        runtime for non-Optuna samplers (builtin/: one module
+                    per sampler, sa.py and owg.py; quantum.py)
+    protocols.py    SamplerPlugin protocol; errors.py: resolver errors
   client/         REST/WS SDK (Client, StudyHandle, Trial, errors) — httpx
-  worker/         evaluator CLI (evaluator_cli.py, registry.py, slurm.py);
-                  `intelloptim-worker evaluator` subcommand only
-  params.py / pruners.py / samplers.py   re-export shims over core/
+  worker/         `intelloptim-worker` CLI (cli.py) with the `evaluator`
+                  subcommand only (evaluator_cli.py, registry.py, slurm.py)
+  params.py       public facade over core/parameters: the `...Spec` classes
+                  without the suffix (`intopt.params.Float(...)`). Samplers
+                  and pruners are reached through core only: `intopt.samplers`
+                  and `intopt.pruners` are the core packages (`...Spec` names)
   cli.py          minimal top-level `intelloptim` CLI
 ```
 
@@ -64,7 +76,7 @@ src/intelloptim/
    process boundaries.**
 4. **`_internal/hashing.py` must produce byte-stable output.**
 5. **`client/` is the only module that talks to a server over HTTP.**
-6. **`core/samplers/quantum/_stubs.py` is constructible but unimplemented.**
+6. **`core/samplers/quantum.py` is constructible but unimplemented.**
    Do not implement quantum samplers here — they ship as external plugins.
 
 ## Wire protocol invariants
@@ -88,9 +100,18 @@ src/intelloptim/
 ## Sampler plugin contract
 
 To add a **built-in** sampler: add a spec class in `core/samplers/`, add its
-`kind` to `SamplerKind`, add it to `SamplerSpec` (`_internal/schemas.py`) and
-`ConcreteSampler` (`algorithms/samplers.py`), and register a resolver in
-`algorithms/samplers.py:_RESOLVERS`.
+`kind` to `SamplerKind` (`core/samplers/base.py`), add it to the `SamplerSpec`
+union (`core/samplers/__init__.py`), and register a resolver in
+`algorithms/samplers.py:_RESOLVERS`. If it is not a thin wrapper over an
+Optuna sampler, put its runtime in `algorithms/backend/` (see `SASampler`).
+Pruners follow the same pattern (`PrunerKind` / `PrunerSpec` /
+`algorithms/pruners.py:_RESOLVERS`).
+
+Built-in samplers must be **stateless**: the orchestrator builds a fresh
+sampler on every ask, so anything an in-memory sampler would remember (e.g.
+the SA temperature and current point) must be rebuilt from the study's trial
+history, with RNGs derived from the seed and trial number.
+`algorithms/backend/builtin/sa.py:SASampler` is the reference implementation.
 
 To add an **external** sampler (e.g. quantum): register under the
 `intelloptim.samplers` entry-point group; the entry-point *name* must equal
@@ -99,8 +120,17 @@ optuna.samplers.BaseSampler`. `load_sampler_plugins()` discovers these.
 Contract + reference plugin: `docs/samplers/quantum_plugin.md` and
 `examples/04_quantum_plugin/`.
 
-Ships in-repo: `TPE` (inline), `RemoteRandom` (Celery-dispatched synthetic,
-the server's test vehicle), `QuantumQAOA`/`QuantumVQE` (constructible stubs).
+Ships in-repo: `Random`, `TPE`, `GP`, `NSGA-II`, `QMC` (Optuna-backed),
+`SA` (simulated annealing) and `OWG` (objective-weighted Gaussian), both in
+`algorithms/backend/builtin/`, and `QuantumQAOA`/`QuantumVQE`
+(constructible stubs).
+
+`OWG` is the test vehicle for the rebuild plane
+(`BaseRebuildSamplerSpec`: `runs_remote=True` plus a `RebuildPolicy`). Its
+model is fitted by `sampler.rebuild(study)` — called by the server's
+`rebuild_sampler` task — and persisted in the study's user attrs
+(`intopt:owg`); asks only read it. Rebuildable
+samplers should follow this pattern, since asks never share an instance.
 
 ## SDK contract
 
@@ -109,7 +139,7 @@ import intelloptim as intopt
 with intopt.Client(url="...", token=...) as client:
     study = client.create_study(
         name="...", direction="minimize",
-        sampler=intopt.samplers.TPE(seed=42),
+        sampler=intopt.samplers.TPESamplerSpec(seed=42),
         parameters=[intopt.params.Float("x", -10, 10)],
     )
     study.optimize(my_objective, n_trials=50, catch=Exception)
@@ -142,26 +172,31 @@ with intopt.Client(url="...", token=...) as client:
   dependency on the private server here.**
 - Trial params in tests: `trial.suggest_float("x", -1, 1)` or
   `trial.params["x"]`.
+- Every feature or bug fix ships with `pytest` tests (happy path + edge
+  cases) under `tests/unit/`, written before the task is declared done.
 
 ## Style
 
 Global preferences apply (Black 88-col, double quotes, `typing.List/Dict/
-Optional`, `os.path`, type hints). Wire schemas in `_internal/schemas.py`;
+Optional`, `os.path`, type hints, **Google-style docstrings** with `Args:` /
+`Returns:` / `Raises:`). Wire schemas in `_internal/schemas.py`;
 no comments unless *why* is non-obvious. Keep `mypy --strict` clean.
 
 ## Do not modify without explicit instruction
 
 - `_internal/hashing.py` + `study_identity` (federation breaks silently)
 - `_internal/schemas.py` wire models (versioned change; bump `API_VERSION`)
-- `core/samplers/quantum/_stubs.py`; the Optuna study-name → `study_id` convention
+- `core/samplers/quantum.py`; the Optuna study-name → `study_id` convention
 - `study_identity` signature — takes `study_key: str` (opaque UUID4), NOT a
   raw bearer token. The `study_key` is resolved server-side from the token.
   Swapping back to raw-token hashing silently breaks federation.
 
 ## Common commands
 
+`PYBIN` (path to the project's conda env `bin/`) is machine-specific and lives
+in the gitignored `.claude/local.md`.
+
 ```bash
-PYBIN=/path/to/conda/envs/intelloptim/bin
 $PYBIN/pip install -e ".[client,dev]"
 $PYBIN/pytest tests/unit -q
 $PYBIN/ruff check src/ tests/

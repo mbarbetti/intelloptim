@@ -1,5 +1,6 @@
 # GenAI tools
 .claude/settings*
+.claude/local.md
 .impeccable/
 
 # Python
