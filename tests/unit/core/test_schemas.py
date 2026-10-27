@@ -17,7 +17,7 @@ from intelloptim._internal.schemas import (
     StudyResolveResponse,
     TellRequest,
 )
-from intelloptim.core.parameters import Float, Int
+from intelloptim.core.parameters import FloatSpec, IntSpec
 from intelloptim.core.pruners import NopPrunerSpec
 from intelloptim.core.samplers.optuna import TPESamplerSpec
 from intelloptim.core.samplers.quantum import QuantumQAOA
@@ -32,7 +32,7 @@ def test_resolve_request_round_trip() -> None:
     req = StudyResolveRequest(
         name="demo",
         direction="minimize",
-        parameters=[Float("x", 0.0, 1.0), Int("n", 1, 10)],
+        parameters=[FloatSpec("x", 0.0, 1.0), IntSpec("n", 1, 10)],
         sampler=TPESamplerSpec(seed=42),
         pruner=NopPrunerSpec(),
     )
@@ -44,7 +44,7 @@ def test_resolve_request_with_quantum_sampler() -> None:
     req = StudyResolveRequest(
         name="quantum",
         direction="minimize",
-        parameters=[Float("x", 0.0, 1.0)],
+        parameters=[FloatSpec("x", 0.0, 1.0)],
         sampler=QuantumQAOA(reps=2),
         pruner=NopPrunerSpec(),
     )
@@ -122,7 +122,7 @@ def test_parameter_spec_discriminator_round_trip() -> None:
     floats = adapter.validate_python(
         {"kind": "float", "name": "x", "low": 0.0, "high": 1.0}
     )
-    assert isinstance(floats, Float)
+    assert isinstance(floats, FloatSpec)
 
 
 def test_sampler_spec_discriminator_round_trip() -> None:

@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
+from pydantic import Field, model_validator
+
 from intelloptim.core.pruners.base import BasePrunerSpec, PrunerKind
 
 
@@ -38,12 +40,12 @@ class NopPrunerSpec(BasePrunerSpec):
     Every trial runs to completion regardless of its intermediate values.
     A sensible starting point when your objective has no natural intermediate
     checkpoints, or when you want a reference run without early stopping.
-    
-    See `Optuna NopPruner 
+
+    See `Optuna NopPruner
     <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.NopPruner.html>`_
     for full details.
     """
-    
+
     kind: Literal[PrunerKind.NOP] = PrunerKind.NOP
 
 
@@ -56,7 +58,7 @@ class MedianPrunerSpec(BasePrunerSpec):
 
     A step is any integer label you pass to ``trial.report(value, step=...)``;
     epoch numbers and iteration counts are the most common choices.
-    
+
     See `Optuna MedianPruner
     <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.MedianPruner.html>`_
     for full details.
@@ -75,13 +77,13 @@ class MedianPrunerSpec(BasePrunerSpec):
             at the current step to make a pruning decision. If fewer are
             available, the trial continues.
     """
-    
+
     kind: Literal[PrunerKind.MEDIAN] = PrunerKind.MEDIAN
-    
-    n_startup_trials: int = 5
-    n_warmup_steps: int = 0
-    interval_steps: int = 1
-    n_min_trials: int = 1
+
+    n_startup_trials: int = Field(default=5, ge=0)
+    n_warmup_steps: int = Field(default=0, ge=0)
+    interval_steps: int = Field(default=1, ge=1)
+    n_min_trials: int = Field(default=1, ge=1)
 
 
 class PercentilePrunerSpec(BasePrunerSpec):
@@ -91,7 +93,7 @@ class PercentilePrunerSpec(BasePrunerSpec):
     stopped when its best value so far falls in the bottom ``percentile`` of
     completed trials that reported at the same step. Setting
     ``percentile=50`` reproduces the median rule.
-    
+
     See `Optuna PercentilePruner
     <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.PercentilePruner.html>`_
     for full details.
@@ -109,14 +111,14 @@ class PercentilePrunerSpec(BasePrunerSpec):
         n_min_trials (int): Minimum number of reference values required at
             the current step to make a pruning decision.
     """
-    
+
     kind: Literal[PrunerKind.PERCENTILE] = PrunerKind.PERCENTILE
-    
-    percentile: float = 25.0
-    n_startup_trials: int = 5
-    n_warmup_steps: int = 0
-    interval_steps: int = 1
-    n_min_trials: int = 1
+
+    percentile: float = Field(default=25.0, ge=0, le=100)
+    n_startup_trials: int = Field(default=5, ge=0)
+    n_warmup_steps: int = Field(default=0, ge=0)
+    interval_steps: int = Field(default=1, ge=1)
+    n_min_trials: int = Field(default=1, ge=1)
 
 
 class ThresholdPrunerSpec(BasePrunerSpec):
@@ -126,7 +128,7 @@ class ThresholdPrunerSpec(BasePrunerSpec):
     interval ``[lower, upper]`` or becomes ``nan``. Unlike the median and
     percentile pruners, the decision is absolute — it does not depend on
     how other trials are performing.
-    
+
     See `Optuna ThresholdPruner
     <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.pruners.ThresholdPruner.html>`_
     for full details.
@@ -135,19 +137,35 @@ class ThresholdPrunerSpec(BasePrunerSpec):
         lower (Optional[float]): Minimum allowed intermediate value. ``None``
             means no lower bound is applied.
         upper (Optional[float]): Maximum allowed intermediate value. ``None``
-            means no upper bound is applied.
+            means no upper bound is applied. At least one of ``lower`` and
+            ``upper`` is required, and ``lower`` must be below ``upper``.
         n_warmup_steps (int): Number of steps at the start of each trial
             where threshold checks are skipped.
         interval_steps (int): Steps between consecutive threshold checks,
             counted from the end of the warm-up phase.
     """
-    
+
     kind: Literal[PrunerKind.THRESHOLD] = PrunerKind.THRESHOLD
-    
-    lower: Optional[float] = None
-    upper: Optional[float] = None
-    n_warmup_steps: int = 0
-    interval_steps: int = 1
+
+    lower: Optional[float] = Field(default=None, allow_inf_nan=False)
+    upper: Optional[float] = Field(default=None, allow_inf_nan=False)
+    n_warmup_steps: int = Field(default=0, ge=0)
+    interval_steps: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def _check_bounds(self) -> "ThresholdPrunerSpec":
+        if self.lower is None and self.upper is None:
+            raise ValueError("ThresholdPrunerSpec: set at least one of lower or upper")
+        if (
+            self.lower is not None
+            and self.upper is not None
+            and self.lower >= self.upper
+        ):
+            raise ValueError(
+                f"ThresholdPrunerSpec: lower ({self.lower}) must be < "
+                f"upper ({self.upper})"
+            )
+        return self
 
 
 __all__ = [

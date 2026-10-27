@@ -8,15 +8,17 @@ code can write::
 
 from day one. Resolving the spec to a runtime sampler requires an external
 plugin registered under the ``intelloptim.samplers`` entry-point group; if
-no plugin matches, the orchestrator raises :class:`NotImplementedError`
-with a pointer to ``docs/samplers/quantum_plugin.md``.
+no plugin matches, resolution raises
+:class:`~intelloptim.algorithms.errors.SamplerNotImplementedError`.
 """
 
 from __future__ import annotations
 
 from typing import Literal, Optional
 
-from intelloptim.core.samplers.base import SamplerKind, BaseRebuildSamplerSpec
+from pydantic import Field
+
+from intelloptim.core.samplers.base import BaseRebuildSamplerSpec, SamplerKind
 
 
 class QuantumQAOA(BaseRebuildSamplerSpec):
@@ -28,19 +30,22 @@ class QuantumQAOA(BaseRebuildSamplerSpec):
     are decoded back into parameter assignments.
 
     Args:
-        reps: QAOA depth (commonly written ``p``). Larger ``reps`` give
-            better approximation ratios at exponential simulation cost.
-        optimizer: Classical optimizer driving the variational angles
-            (e.g. ``"COBYLA"``, ``"SPSA"``).
-        shots: Number of measurement shots per circuit execution.
-        seed: Random seed for the variational optimizer.
+        reps (int): QAOA depth (commonly written ``p``), at least ``1``. Larger
+            ``reps`` give better approximation ratios at exponential
+            simulation cost. Defaults to ``1``.
+        optimizer (str): Classical optimizer driving the variational angles
+            (e.g. ``"COBYLA"``, ``"SPSA"``). Defaults to ``"COBYLA"``.
+        shots (int): Number of measurement shots per circuit execution, at
+            least ``1``. Defaults to ``1024``.
+        seed (Optional[int]): Random seed for the variational optimizer.
+            Defaults to ``None``.
     """
 
     kind: Literal[SamplerKind.QUANTUM_QAOA] = SamplerKind.QUANTUM_QAOA
 
-    reps: int = 1
+    reps: int = Field(default=1, ge=1)
     optimizer: str = "COBYLA"
-    shots: int = 1024
+    shots: int = Field(default=1024, ge=1)
     seed: Optional[int] = None
 
 
@@ -51,18 +56,22 @@ class QuantumVQE(BaseRebuildSamplerSpec):
     choices into the eigenstates of a problem Hamiltonian.
 
     Args:
-        ansatz: Name of the variational circuit ansatz (e.g.
-            ``"RealAmplitudes"``, ``"EfficientSU2"``).
-        optimizer: Classical optimizer for the variational parameters.
-        shots: Measurement shots per circuit execution.
-        seed: Random seed for the variational optimizer.
+        ansatz (str): Name of the variational circuit ansatz (e.g.
+            ``"RealAmplitudes"``, ``"EfficientSU2"``). Defaults to
+            ``"RealAmplitudes"``.
+        optimizer (str): Classical optimizer for the variational parameters.
+            Defaults to ``"COBYLA"``.
+        shots (int): Measurement shots per circuit execution, at least ``1``.
+            Defaults to ``1024``.
+        seed (Optional[int]): Random seed for the variational optimizer.
+            Defaults to ``None``.
     """
 
     kind: Literal[SamplerKind.QUANTUM_VQE] = SamplerKind.QUANTUM_VQE
 
     ansatz: str = "RealAmplitudes"
     optimizer: str = "COBYLA"
-    shots: int = 1024
+    shots: int = Field(default=1024, ge=1)
     seed: Optional[int] = None
 
 

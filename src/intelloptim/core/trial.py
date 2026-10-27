@@ -1,20 +1,18 @@
-"""Trial domain types.
+"""Trial lifecycle states.
 
-A :class:`Trial` is a passive, server-authoritative record of one
-optimization step: its identifier, its position in the study, the
-parameter values the sampler suggested, and (once evaluated) its value
-and state.
+A *trial* is one evaluation of the objective: the sampler proposes parameter
+values, an evaluator computes the objective value, and the result is reported
+back to the study. :class:`TrialState` names the states a trial moves through,
+from waiting to evaluated, pruned or failed. It is shared by the client, the
+server and the wire schemas.
 
-The client-side wrapper that exposes ``trial.suggest_float(...)`` etc. is
-a thin layer on top and lives in ``intelloptim.client.trial`` (Phase 2).
+The client-side wrapper that exposes ``trial.suggest_float(...)`` and friends
+to objective code lives in :mod:`intelloptim.client.trial`.
 """
 
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, Optional
-
-from pydantic import BaseModel, ConfigDict, Field
 
 
 class TrialState(str, Enum):
@@ -30,35 +28,10 @@ class TrialState(str, Enum):
     """Evaluated successfully; ``value`` is set."""
 
     PRUNED = "pruned"
-    """Evaluator stopped the trial early; ``value`` may be ``None``."""
+    """Stopped early by the pruner; ``value`` may be ``None``."""
 
     FAILED = "failed"
-    """Evaluator raised; ``value`` is ``None``."""
+    """The evaluation raised; ``value`` is ``None``."""
 
 
-class Trial(BaseModel):
-    """A single optimization step.
-
-    Args:
-        id: Server-assigned, opaque trial identifier.
-        number: Zero-based ordinal within the study.
-        params: Mapping of parameter name to suggested value. Only the
-            sampler may write here; the client treats it as read-only.
-        state: Current lifecycle state.
-        value: Objective value once the trial completes; ``None``
-            otherwise.
-        intermediate_values: Optional per-step intermediate values used
-            by pruners.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=False)
-
-    id: str
-    number: int
-    params: Dict[str, Any]
-    state: TrialState = TrialState.RUNNING
-    value: Optional[float] = None
-    intermediate_values: Dict[int, float] = Field(default_factory=dict)
-
-
-__all__ = ["Trial", "TrialState"]
+__all__ = ["TrialState"]

@@ -50,6 +50,7 @@ class SamplerKind(str, Enum):
     # NSGA3 = "nsga3"  # not yet supported
     QMC = "qmc"
     SA = "sa"
+    OWG = "owg"
     REMOTE_RANDOM = "remote_random"
     QUANTUM_QAOA = "quantum_qaoa"
     QUANTUM_VQE = "quantum_vqe"
@@ -60,8 +61,8 @@ class RebuildPolicy(BaseModel):
 
     Heavy samplers, such as Bayesian optimization surrogates and hybrid
     quantum-classical loops, typically refit from accumulated trials rather
-    than after each trial. During a rebuild, the study enters
-    :attr:`StudyState.REBUILDING`, and ``/ask`` returns ``503 Retry-After``.
+    than after each trial. During a rebuild, the study is in the ``REBUILDING``
+    state, and ``/ask`` returns ``503 Retry-After``.
 
     Args:
         every_n_tells (Optional[int]): Rebuild after every N completed tells.
@@ -107,8 +108,8 @@ class BaseSamplerSpec(BaseModel):
     rebuild_policy: ClassVar[Optional[RebuildPolicy]] = None
     """When set, the orchestrator schedules sampler rebuilds per the
     policy. Lightweight inline samplers leave this as ``None``."""
-    
-    
+
+
 class BaseRebuildSamplerSpec(BaseSamplerSpec):
     """Shared base class for stateful, rebuildable sampler specs.
 

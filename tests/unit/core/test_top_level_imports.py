@@ -31,6 +31,25 @@ def test_pruners_namespace() -> None:
     assert intopt.pruners.MedianPrunerSpec(n_warmup_steps=3).n_warmup_steps == 3
 
 
+def test_params_aliases_point_to_the_core_specs() -> None:
+    import intelloptim as intopt
+    from intelloptim.core import parameters
+
+    assert intopt.params.Float is parameters.FloatSpec
+    assert intopt.params.Int is parameters.IntSpec
+    assert intopt.params.Categorical is parameters.CategoricalSpec
+    public = {n for n in dir(intopt.params) if not n.startswith("_")}
+    assert public == set(intopt.params.__all__)
+
+
+def test_samplers_and_pruners_are_the_core_packages() -> None:
+    import intelloptim as intopt
+    from intelloptim.core import pruners, samplers
+
+    assert intopt.samplers is samplers
+    assert intopt.pruners is pruners
+
+
 def test_samplers_namespace_classical() -> None:
     import intelloptim as intopt
 
@@ -51,17 +70,22 @@ def test_samplers_namespace_quantum_constructible() -> None:
 
 def test_objective_decorator() -> None:
     import intelloptim as intopt
-    from intelloptim.core.objective import _clear_registry_for_tests
+    from intelloptim.core.objective import (
+        ObjectiveAlreadyRegisteredError,
+        _clear_registry_for_tests,
+        get_study_spec,
+    )
 
     _clear_registry_for_tests()
+    spec = {"name": "toplevel", "direction": "minimize"}
 
-    @intopt.objective("toplevel_toy")
+    @intopt.objective("toplevel_toy", study_spec=spec)
     def f(trial):  # noqa: ARG001 - signature placeholder
         return 0.0
 
-    from intelloptim.core.objective import get_objective
-
-    assert get_objective("toplevel_toy") is f
+    assert get_study_spec("toplevel_toy") == spec
+    with pytest.raises(ObjectiveAlreadyRegisteredError):
+        intopt.objective("toplevel_toy")(lambda trial: 1.0)
     _clear_registry_for_tests()
 
 

@@ -4,15 +4,18 @@ A *pruner* decides whether a running trial should be stopped early because
 its intermediate results look unpromising compared to the rest of the study.
 This module provides the two building blocks shared by every pruner:
 
-- :class:`PrunerKind` - an enum that uniquely identifies each pruning
+- :class:`PrunerKind` — an enum that uniquely identifies each pruning
   strategy. Every concrete pruner carries one of these values as its ``kind``
   field, which lets the framework dispatch to the right logic without
   inspecting the full object.
 
-- :class:`BasePrunerSpec` - the immutable base model every pruner spec inherits
+- :class:`BasePrunerSpec` — the immutable base model every pruner spec inherits
   from. Inheriting from it enforces that specs are frozen (no in-place
   mutation after construction) and reject unknown fields, so a study
   definition always means exactly what it says.
+
+Pruner specs are pure configuration objects that travel over the wire as
+part of a study spec and participate in the canonical study hash.
 
 Concrete pruner specs live in sibling modules and subclass :class:`BasePrunerSpec`
 to add their own configuration fields.

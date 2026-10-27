@@ -1,27 +1,43 @@
-"""Sampler specs backed by Optuna's built-in strategies.
+"""Sampler specs for Optuna's built-in strategies.
 
-Each class is a plain configuration object — no Optuna import happens here.
-The actual ``optuna.samplers.*`` instance is created server-side by
-:func:`~intelloptim.algorithms.samplers.resolve_sampler` at study-resolution
-time.
+Each class in this module is a plain configuration object — it captures the
+parameters that control one sampling strategy, nothing more. Constructing a
+spec is cheap and has no side effects, and no Optuna import happens here;
+validation happens at construction time so you catch misconfigured samplers
+before a study is ever submitted. The actual ``optuna.samplers.*`` instance is
+created server-side by :func:`~intelloptim.algorithms.samplers.resolve_sampler`
+at study-resolution time.
 
-Available samplers:
+Five strategies are available:
 
--- :class:`RandomSamplerSpec` — uniform random draws; a zero-configuration
-  baseline that requires no warm-up.
--- :class:`TPESamplerSpec` — Tree-structured Parzen Estimator; the recommended
-  default for most single-objective problems.
-- :class:`GPSamplerSpec` — Gaussian-process Bayesian optimisation; best for
-  low-dimensional, expensive-to-evaluate objectives.
-- :class:`NSGAIISamplerSpec` — NSGA-II genetic algorithm; for multi-objective
-  studies.
-- :class:`QMCSamplerSpec` — Quasi-Monte Carlo low-discrepancy sequences; a
-  structured alternative to random for space-filling exploration.
+- :class:`RandomSamplerSpec` — draws each parameter independently and
+  uniformly; a zero-configuration baseline that needs no warm-up and never
+  exploits prior results. Use it to sanity-check the search space or when
+  you have too few trials for a surrogate model to pay off.
+- :class:`TPESamplerSpec` — Tree-structured Parzen Estimator; models the
+  densities of good and poor trials and samples where their ratio is highest.
+  A solid default for most single-objective studies.
+- :class:`GPSamplerSpec` — Gaussian-process Bayesian optimisation; fits a
+  surrogate to past trials and maximises an acquisition function. Best for
+  low-dimensional, expensive-to-evaluate objectives where the refit cost is
+  acceptable.
+- :class:`NSGAIISamplerSpec` — NSGA-II genetic algorithm; evolves a population
+  using non-dominated sorting. Use it when the study has two or more
+  objectives.
+- :class:`QMCSamplerSpec` — Quasi-Monte Carlo low-discrepancy sequences; fills
+  the space more uniformly than random draws. Use ``qmc_type="sobol"`` in low
+  dimensions or ``"halton"`` in higher ones, for space-filling initial
+  exploration.
+
+All five share the same base: they inherit from :class:`BaseSamplerSpec`,
+which makes them immutable and strict about unknown fields.
 """
 
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Optional
+from typing import Literal, Optional
+
+from pydantic import Field, model_validator
 
 from intelloptim.core.samplers.base import BaseSamplerSpec, SamplerKind
 
@@ -45,8 +61,6 @@ class RandomSamplerSpec(BaseSamplerSpec):
     kind: Literal[SamplerKind.RANDOM] = SamplerKind.RANDOM
 
     seed: Optional[int] = None
-
-    runs_remote: ClassVar[bool] = False
 
 
 class TPESamplerSpec(BaseSamplerSpec):
@@ -73,7 +87,7 @@ class TPESamplerSpec(BaseSamplerSpec):
             Defaults to ``24``.
         multivariate (bool): When ``True``, model joint parameter
             dependencies instead of treating each parameter independently.
-            Recommended when parameters interact. Defaults to ``False``.
+            Recommended when parameters interact. Defaults to ``True``.
         group (bool): When ``True`` and ``multivariate=True``, decompose
             the search space into independent subspaces and sample each
             jointly. Requires ``multivariate=True``. Defaults to ``False``.
@@ -82,12 +96,16 @@ class TPESamplerSpec(BaseSamplerSpec):
     kind: Literal[SamplerKind.TPE] = SamplerKind.TPE
 
     seed: Optional[int] = None
-    n_startup_trials: int = 10
-    n_ei_candidates: int = 24
-    multivariate: bool = False
+    n_startup_trials: int = Field(default=10, ge=0)
+    n_ei_candidates: int = Field(default=24, gt=0)
+    multivariate: bool = True
     group: bool = False
 
-    runs_remote: ClassVar[bool] = False
+    @model_validator(mode="after")
+    def _check_group(self) -> "TPESamplerSpec":
+        if self.group and not self.multivariate:
+            raise ValueError("TPESamplerSpec: group=True requires multivariate=True")
+        return self
 
 
 class GPSamplerSpec(BaseSamplerSpec):
@@ -117,10 +135,8 @@ class GPSamplerSpec(BaseSamplerSpec):
     kind: Literal[SamplerKind.GP] = SamplerKind.GP
 
     seed: Optional[int] = None
-    n_startup_trials: int = 10
+    n_startup_trials: int = Field(default=10, ge=0)
     deterministic_objective: bool = False
-
-    runs_remote: ClassVar[bool] = False
 
 
 class NSGAIISamplerSpec(BaseSamplerSpec):
@@ -152,13 +168,11 @@ class NSGAIISamplerSpec(BaseSamplerSpec):
 
     kind: Literal[SamplerKind.NSGA2] = SamplerKind.NSGA2
 
-    population_size: int = 50
-    mutation_prob: Optional[float] = None
-    crossover_prob: float = 0.9
-    swapping_prob: float = 0.5
+    population_size: int = Field(default=50, ge=2)
+    mutation_prob: Optional[float] = Field(default=None, ge=0, le=1)
+    crossover_prob: float = Field(default=0.9, ge=0, le=1)
+    swapping_prob: float = Field(default=0.5, ge=0, le=1)
     seed: Optional[int] = None
-
-    runs_remote: ClassVar[bool] = False
 
 
 class QMCSamplerSpec(BaseSamplerSpec):
@@ -191,15 +205,10 @@ class QMCSamplerSpec(BaseSamplerSpec):
     scramble: bool = False
     seed: Optional[int] = None
 
-    runs_remote: ClassVar[bool] = False
-
-
-TPESampler = TPESamplerSpec
 
 __all__ = [
     "RandomSamplerSpec",
     "TPESamplerSpec",
-    "TPESampler",
     "GPSamplerSpec",
     "NSGAIISamplerSpec",
     "QMCSamplerSpec",

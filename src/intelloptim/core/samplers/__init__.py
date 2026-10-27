@@ -36,14 +36,17 @@ from typing import Annotated, Union
 from pydantic import Field
 
 from intelloptim.core.samplers.base import SamplerKind
+from intelloptim.core.samplers.builtin import (
+    OWGSamplerSpec,
+    SASamplerSpec,
+)
 from intelloptim.core.samplers.optuna import (
-    RandomSamplerSpec,
-    TPESamplerSpec,
     GPSamplerSpec,
     NSGAIISamplerSpec,
     QMCSamplerSpec,
+    RandomSamplerSpec,
+    TPESamplerSpec,
 )
-from intelloptim.core.samplers.builtin import SASamplerSpec
 from intelloptim.core.samplers.quantum import QuantumQAOA, QuantumVQE
 
 SamplerSpec = Annotated[
@@ -54,6 +57,7 @@ SamplerSpec = Annotated[
         NSGAIISamplerSpec,
         QMCSamplerSpec,
         SASamplerSpec,
+        OWGSamplerSpec,
         QuantumQAOA,
         QuantumVQE,
     ],
@@ -69,6 +73,7 @@ __all__ = [
     "NSGAIISamplerSpec",
     "QMCSamplerSpec",
     "SASamplerSpec",
+    "OWGSamplerSpec",
     "QuantumQAOA",
     "QuantumVQE",
     "SamplerSpec",
