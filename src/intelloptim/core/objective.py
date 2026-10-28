@@ -55,13 +55,13 @@ def objective(
         @intopt.objective(
             "pump_calibration",
             study_spec={
-                "name": "pump-cal-2026-Q2",
+                "study_name": "pump-cal-2026-Q2",
                 "direction": "minimize",
-                "sampler": {"kind": "tpe"},
+                "sampler_spec": {"kind": "tpe"},
                 "parameters": [
                     {"kind": "float", "name": "x", "low": -5.0, "high": 5.0},
                 ],
-                "pruner": {"kind": "nop"},
+                "pruner_spec": {"kind": "nop"},
             },
         )
         def pump_calibration(trial: intopt.Trial) -> float:

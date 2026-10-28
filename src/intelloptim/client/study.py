@@ -1,27 +1,32 @@
-"""``StudyHandle`` — the Optuna-shaped per-study object.
+"""Handle to a study on the server.
 
-A :class:`StudyHandle` wraps the client-server REST surface for a single
-study. It is constructed via :meth:`Client.create_study`; users do not
-instantiate it directly.
+A :class:`StudyHandle` wraps the client-server REST surface of one study. It is
+returned by :meth:`~intelloptim.client.api.Client.create_study`; users do not
+instantiate it directly. The study, including its search space, is already
+defined by then: the handle only asks the server for trials and reports their
+results.
 
-Two usage flavours coexist:
+Two ways of running the loop are available:
 
-* **Explicit ask/tell** loop, useful when the evaluator code is
-  imperative or needs custom error handling::
+- **Explicit ask/tell**, useful when the evaluator code is imperative or needs
+  custom error handling::
 
       for _ in range(50):
           trial = study.ask()
-          value = my_objective(trial.params["lr"])
+          value = my_objective(trial.sampled_float("lr"))
           study.tell(trial, value)
 
-* **Optuna-shaped** :meth:`optimize` helper that runs the loop on the
-  user's behalf and catches exceptions to mark trials ``FAILED``::
+- :meth:`StudyHandle.optimize`, which runs the same loop on the user's behalf
+  and marks trials whose objective raised as ``FAILED``::
 
       def objective(trial):
-          lr = trial.suggest_float("lr", 1e-5, 1.0, log=True)
+          lr = trial.sampled_float("lr")
           return train(lr)
 
       study.optimize(objective, n_trials=200)
+
+Every request carries the study's ``config_digest``, so the server can detect
+that this client and the study disagree on its configuration.
 """
 
 from __future__ import annotations
@@ -35,10 +40,10 @@ from intelloptim._internal.schemas import (
     EnqueueRequest,
     EnqueueResponse,
     TellRequest,
+    TrialState,
 )
 from intelloptim.client.errors import InsufficientQuotaError
 from intelloptim.client.trial import Trial
-from intelloptim.core.trial import TrialState
 
 if TYPE_CHECKING:
     from intelloptim.client.api import Client
@@ -48,17 +53,20 @@ _log = get_logger(__name__)
 
 
 class StudyHandle:
-    """A handle to a server-side study.
+    """A handle to a study that lives on the server.
 
     Args:
-        client: The :class:`Client` that resolved this study.
-        study_id: Server-assigned content-addressed identifier.
-        existed: ``True`` if the study already existed when resolved
-            (i.e. another caller had already created it), ``False`` on
-            first-touch creation.
-        n_trials: Trials present on the server at resolve time.
-        config_digest: Locally-computed digest of the canonical config;
-            attached to every request so the server can detect drift.
+        client (Client): The client that resolved this study, used to send
+            every request.
+        study_id (str): Server-assigned, content-addressed identifier of the
+            study.
+        existed (bool): ``True`` if the study already existed when it was
+            resolved, because another caller had created it; ``False`` if
+            this call created it.
+        n_trials (int): Number of trials the study already had at resolve time.
+        config_digest (str): Digest of the study configuration, computed
+            locally and attached to every request so that the server can
+            detect drift.
     """
 
     def __init__(
@@ -82,6 +90,7 @@ class StudyHandle:
 
     @property
     def id(self) -> str:
+        """The content-addressed identifier of the study."""
         return self._study_id
 
     @property
@@ -91,6 +100,7 @@ class StudyHandle:
 
     @property
     def config_digest(self) -> str:
+        """The digest of the study configuration sent with every request."""
         return self._config_digest
 
     # ------------------------------------------------------------------
@@ -100,19 +110,28 @@ class StudyHandle:
     def ask(self, worker_id: Optional[str] = None) -> Trial:
         """Request the next trial from the server.
 
+        The trial carries the parameter values the server's sampler chose; read
+        them with the ``sampled_*`` accessors of :class:`Trial`.
+
         Args:
-            worker_id: Optional caller identifier surfaced in server
-                logs and (later) the dashboard's workers view.
+            worker_id (Optional[str]): Identifier of the caller, shown in the
+                server logs and, later, in the dashboard's workers view.
+                Defaults to ``None``.
 
         Returns:
-            A :class:`Trial` whose ``params`` dict carries the values
-            the server's sampler proposed.
+            Trial: The new trial, in the running state until it is reported
+            with :meth:`tell`.
 
         Raises:
-            StudyStoppedError: The study is stopped (HTTP 410).
-            StudyRebuildingError: The study is rebuilding; the wrapped
-                exception carries the server's ``Retry-After`` hint.
-            ConfigDigestMismatchError: Local and server configs diverged.
+            StudyNotFoundError: If the server has no such study.
+            StudyStoppedError: If the study has been stopped.
+            StudyRebuildingError: If the study is rebuilding its sampler. The
+                error carries the server's ``Retry-After`` hint in
+                ``retry_after_seconds``.
+            ConfigDigestMismatchError: If the study configuration on the server
+                differs from this client's.
+            IntelloptimAPIError: For any other error response, such as an
+                exhausted quota.
         """
         body = AskRequest(
             config_digest=self._config_digest, worker_id=worker_id
@@ -136,13 +155,23 @@ class StudyHandle:
         """Report the outcome of a trial.
 
         Args:
-            trial: The :class:`Trial` previously returned by
-                :meth:`ask`.
-            value: Objective value. Required when *state* is ``COMPLETE``;
-                optional for ``PRUNED`` or ``FAILED``.
-            state: Final lifecycle state of the trial.
-            intermediate_values: Optional per-step intermediate values
-                used by pruners (Phase 1 stores but does not act on them).
+            trial (Trial): The trial previously returned by :meth:`ask`.
+            value (Optional[float]): Objective value. Required when *state* is
+                ``COMPLETE``; optional for ``PRUNED`` and ``FAILED``. Defaults
+                to ``None``.
+            state (TrialState): Final state of the trial. Defaults to
+                ``TrialState.COMPLETE``.
+            intermediate_values (Optional[Dict[int, float]]): Values reported
+                during the trial, keyed by step. They are sent to the server,
+                which does not use them yet. Defaults to ``None``.
+
+        Raises:
+            ValueError: If *state* is ``COMPLETE`` and no *value* is given.
+            TrialNotFoundError: If the server does not know the trial.
+            ConfigDigestMismatchError: If the study configuration on the server
+                differs from this client's.
+            IntelloptimAPIError: For any other error response, such as an
+                exhausted quota.
         """
         if state == TrialState.COMPLETE and value is None:
             raise ValueError(
@@ -165,11 +194,31 @@ class StudyHandle:
         params: Dict[str, Any],
         value: Optional[float] = None,
     ) -> Trial:
-        """Inject an externally-known trial.
+        """Add a trial whose parameter values are already known.
 
-        If *value* is provided the trial is recorded as ``COMPLETE``
-        immediately; otherwise it is placed in ``WAITING`` and the next
-        :meth:`ask` returns its parameters.
+        Use it to seed a study with points evaluated elsewhere, or to have a
+        given point evaluated next. The values should lie inside the search
+        space declared for the study; when an objective *value* is given, the
+        server rejects a point outside it with an error response.
+
+        Args:
+            params (Dict[str, Any]): Mapping of parameter name to value.
+            value (Optional[float]): Objective value, if the point has already
+                been evaluated. With a value the trial is recorded as
+                ``COMPLETE`` at once; without one it is queued as ``WAITING``
+                and returned by the next :meth:`ask` of any client of the
+                study. Defaults to ``None``.
+
+        Returns:
+            Trial: The enqueued trial, with the given *params*.
+
+        Raises:
+            StudyNotFoundError: If the server has no such study.
+            StudyStoppedError: If the study has been stopped.
+            ConfigDigestMismatchError: If the study configuration on the server
+                differs from this client's.
+            IntelloptimAPIError: For any other error response, such as a point
+                outside the search space.
         """
         body = EnqueueRequest(
             config_digest=self._config_digest,
@@ -185,7 +234,16 @@ class StudyHandle:
         )
 
     def stop(self) -> None:
-        """Transition the study to the ``STOPPED`` state."""
+        """Stop the study.
+
+        Afterwards ``ask`` and ``enqueue`` raise
+        :class:`~intelloptim.client.errors.StudyStoppedError` for every client
+        of the study, while ``tell`` still accepts trials that were already
+        running.
+
+        Raises:
+            StudyNotFoundError: If the server has no such study.
+        """
         self._client._post_json(f"/studies/{self._study_id}/stop", {})
 
     def optimize(
@@ -195,26 +253,33 @@ class StudyHandle:
         *,
         catch: Optional[type] = Exception,
     ) -> None:
-        """Run *n_trials* of ``ask -> objective -> tell``.
+        """Run *n_trials* iterations of ask, objective and tell.
 
-        Exceptions raised inside *objective* are reported back to the
-        server as ``FAILED`` and then re-raised unless caught by *catch*.
-        Pass ``catch=None`` to disable the safety net and let trial
-        failures propagate without a final ``/tell``.
+        For each trial, the objective is called with the trial the server
+        provided and its return value is reported as the result. If the
+        objective raises an exception that matches *catch*, a warning is
+        logged, the trial is reported as ``FAILED`` and the loop moves on to the
+        next one. Any other exception is raised immediately, and the trial that
+        was running is left without a result on the server.
+
+        Before the first trial, the number of trials is checked against the
+        remaining call budget, using the quota snapshot fetched when the study
+        was created. The check is skipped if no snapshot is available.
 
         Args:
-            objective: Callable taking a :class:`Trial` and returning
-                the objective value (a float).
-            n_trials: Number of ask/tell iterations to run from *this*
-                client. Other clients sharing the same study contribute
-                their own trials concurrently.
-            catch: Exception class to treat as a recoverable trial
-                failure. Default :class:`Exception`. Use ``catch=None``
-                to disable.
+            objective (Callable[[Trial], float]): Function that reads the
+                parameters from the trial and returns the objective value.
+            n_trials (int): Number of trials to run from this client. Other
+                clients of the same study contribute their own trials
+                concurrently.
+            catch (Optional[type]): Exception class whose instances mark the
+                trial as ``FAILED`` instead of stopping the run. ``None``
+                disables this, so every exception stops the run. Defaults to
+                ``Exception``.
 
         Raises:
-            InsufficientQuotaError: ``n_trials`` exceeds the remaining
-                monthly budget (pre-flight check; no server calls made).
+            InsufficientQuotaError: If *n_trials* exceeds the remaining call
+                budget. No request is made in this case.
         """
         who = self._client._who_am_i
         if who is not None:
@@ -248,7 +313,10 @@ class StudyHandle:
             except Exception as exc:  # noqa: BLE001 - re-raised below
                 if catch is None or not isinstance(exc, catch):
                     raise
-                _log.warning("trial %s failed: %s", trial.trial_id, exc, exc_info=True)
+                _log.warning(
+                    f"trial {trial.trial_id} failed: {exc}",
+                    exc_info=True,
+                )
                 self.tell(trial, value=None, state=TrialState.FAILED)
                 continue
             self.tell(trial, value, state=TrialState.COMPLETE)
@@ -259,7 +327,15 @@ class StudyHandle:
 
     @property
     def best_trial(self) -> Optional[Trial]:
-        """Return the best completed trial, or ``None`` if none exists yet."""
+        """The best completed trial of the study, if there is one.
+
+        Each access asks the server, so the result reflects the trials of every
+        client up to that moment.
+
+        Returns:
+            Optional[Trial]: The best trial, with its ``value`` set, or ``None``
+            if no trial has completed yet.
+        """
         response = self._client._get(f"/studies/{self._study_id}/best_trial")
         payload = response.json()
         if not payload.get("available", False):

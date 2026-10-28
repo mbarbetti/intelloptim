@@ -20,7 +20,6 @@ Sub-modules:
   union that accepts any of them.
 - :mod:`intelloptim.core.pruners` — specs for the early-stopping strategies and
   the union that accepts any of them.
-- :mod:`intelloptim.core.trial` — the lifecycle states of a trial.
 - :mod:`intelloptim.core.objective` — the registry that attaches a study
   specification to a named objective function.
 

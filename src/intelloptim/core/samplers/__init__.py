@@ -13,8 +13,11 @@ Typical usage::
 
     import intelloptim as intopt
 
-    sampler = intopt.samplers.TPESamplerSpec(seed=42, multivariate=True)
-    study = client.create_study(..., sampler=sampler)
+    sampler_spec = intopt.samplers.TPESamplerSpec(
+        seed=42,
+        multivariate=True,
+    )
+    study = client.create_study(..., sampler_spec=sampler_spec)
 
 Sub-modules:
 

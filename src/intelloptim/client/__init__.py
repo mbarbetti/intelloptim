@@ -1,42 +1,27 @@
-"""Client SDK — the surface end-users import as ``intopt.Client`` etc.
+"""Client SDK — the REST client, its handles and the errors it raises.
 
-Phase 2 ships the synchronous client. Direct imports::
+The package exposes what a user script touches:
 
-    from intelloptim.client import Client, StudyHandle, Trial
+- :class:`Client` — connects to a server and creates studies;
+- :class:`StudyHandle` — the study returned by :meth:`Client.create_study`;
+- :class:`Trial` — the values the server sampled for one evaluation;
+- :mod:`~intelloptim.client.errors` — the exception hierarchy rooted at
+  ``IntelloptimError``, reached as ``intelloptim.client.errors.<Name>`` so that
+  a script can catch any failure of the SDK.
 
-Through the top-level alias::
+Everything else (token lookup, request plumbing) is internal. ``Client`` and
+``Trial`` are also available as ``intopt.Client`` and ``intopt.Trial``::
 
     import intelloptim as intopt
 
-    client = intopt.Client(url=..., token=...)
-    study = client.create_study(...)
-    for _ in range(50):
-        trial = study.ask()
-        study.tell(trial, my_objective(trial))
+    with intopt.Client(url="https://intelloptim.local") as client:
+        study = client.create_study(...)
+        study.optimize(my_objective, n_trials=50)
 """
 
+from intelloptim.client import errors
 from intelloptim.client.api import Client
-from intelloptim.client.errors import (
-    ConfigDigestMismatchError,
-    IntelloptimAPIError,
-    IntelloptimError,
-    StudyNotFoundError,
-    StudyRebuildingError,
-    StudyStoppedError,
-    TrialNotFoundError,
-)
 from intelloptim.client.study import StudyHandle
 from intelloptim.client.trial import Trial
 
-__all__ = [
-    "Client",
-    "ConfigDigestMismatchError",
-    "IntelloptimAPIError",
-    "IntelloptimError",
-    "StudyHandle",
-    "StudyNotFoundError",
-    "StudyRebuildingError",
-    "StudyStoppedError",
-    "Trial",
-    "TrialNotFoundError",
-]
+__all__ = ["Client", "StudyHandle", "Trial", "errors"]

@@ -1,36 +1,43 @@
-"""Client-side ``Trial`` with Optuna-shaped ``suggest_*`` methods.
+"""Client-side ``Trial``: the values the server sampled for one evaluation.
 
-In intelloptim's distributed model the *server* runs the sampler and
-ships an already-decided parameter dict to the evaluator. The client
-``Trial`` is therefore a passive wrapper around that dict; its
-``suggest_*`` methods exist only so the user's objective code can look
-like Optuna code::
+In intelloptim's distributed model the search space is declared once, when the
+study is created, and the *server* runs the sampler and ships an already
+decided set of parameter values to the evaluator. The client ``Trial`` is
+therefore a passive record of those values: reading them does not sample
+anything, and calling an accessor twice returns the same value. The objective
+only needs the name of a parameter, because its range, scale and choices are
+already part of the study::
 
     def objective(trial: intopt.Trial) -> float:
-        lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
-        return train_and_score(lr)
+        lr = trial.sampled_float("lr")
+        n_layers = trial.sampled_int("n_layers")
+        activation = trial.sampled_categorical("activation")
+        return train_and_score(lr, n_layers, activation)
 
-The arguments to ``suggest_*`` are kept for API symmetry with Optuna but
-are not used to re-sample — the value the server proposed is already in
-``trial.params``. The orchestrator validates the declared distribution
-against the stored study spec on every request, so mismatches show up as
-a ``409 Conflict`` rather than as silent data drift.
+Coming from Optuna? Here the search space is defined once, when the study is
+created, and not dynamically inside the objective as Optuna's ``suggest_*``
+methods allow. Declare the parameters in
+:meth:`~intelloptim.client.api.Client.create_study` and read them back with the
+``sampled_*`` accessors.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 
 class Trial:
     """One optimization trial as seen by the evaluator.
 
     Args:
-        trial_id: Server-assigned opaque identifier; pass back unchanged
-            in :meth:`StudyHandle.tell`.
-        number: Zero-based ordinal within the study.
-        params: Mapping of parameter name to suggested value, as
-            returned by the server.
+        trial_id (str): Server-assigned opaque identifier; pass it back
+            unchanged in :meth:`~intelloptim.client.study.StudyHandle.tell`.
+        number (int): Zero-based ordinal within the study.
+        params (Dict[str, Any]): Mapping of parameter name to the value the
+            server sampled for it.
+        value (Optional[float]): Final objective value once the trial has
+            completed. Best-trial reads populate it; a fresh ask leaves it
+            ``None``. Defaults to ``None``.
     """
 
     def __init__(
@@ -45,51 +52,60 @@ class Trial:
         self.number = number
         self.params: Dict[str, Any] = dict(params)
         self.value: Optional[float] = value
-        """Final objective value once the trial completes (best-trial reads
-        populate it, fresh asks leave it ``None``)."""
 
     # ------------------------------------------------------------------
-    # Optuna-shaped suggest_* methods
+    # sampled_* accessors
     # ------------------------------------------------------------------
 
-    def suggest_float(
-        self,
-        name: str,
-        low: float,
-        high: float,
-        *,
-        log: bool = False,
-        step: Optional[float] = None,
-    ) -> float:
-        """Return the server-suggested value for the float parameter *name*.
+    def sampled_float(self, name: str) -> float:
+        """Return the value sampled for the float parameter *name*.
 
-        ``low`` / ``high`` / ``log`` / ``step`` are accepted for symmetry
-        with Optuna's API; the suggestion has already been made by the
-        server using the spec registered at study-resolve time.
+        Args:
+            name (str): Name of the parameter, as declared in the study.
+
+        Returns:
+            float: The sampled value. An integer value is converted.
+
+        Raises:
+            KeyError: If the study declares no parameter called *name*.
+            TypeError: If the value is not a number, or is a ``bool``.
         """
-        del low, high, log, step  # symmetry only
-        return float(self._lookup(name))
+        value = self._lookup(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(self._type_message(name, value, "a float"))
+        return float(value)
 
-    def suggest_int(
-        self,
-        name: str,
-        low: int,
-        high: int,
-        *,
-        log: bool = False,
-        step: int = 1,
-    ) -> int:
-        """Return the server-suggested value for the integer parameter *name*."""
-        del low, high, log, step
-        return int(self._lookup(name))
+    def sampled_int(self, name: str) -> int:
+        """Return the value sampled for the integer parameter *name*.
 
-    def suggest_categorical(
-        self,
-        name: str,
-        choices: Sequence[Any],
-    ) -> Any:
-        """Return the server-suggested value for the categorical parameter *name*."""
-        del choices
+        Args:
+            name (str): Name of the parameter, as declared in the study.
+
+        Returns:
+            int: The sampled value.
+
+        Raises:
+            KeyError: If the study declares no parameter called *name*.
+            TypeError: If the value is not an ``int``, which includes floats
+                and ``bool``. Nothing is truncated or rounded.
+        """
+        value = self._lookup(name)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(self._type_message(name, value, "an int"))
+        return value
+
+    def sampled_categorical(self, name: str) -> Any:
+        """Return the value sampled for the categorical parameter *name*.
+
+        Args:
+            name (str): Name of the parameter, as declared in the study.
+
+        Returns:
+            Any: The chosen value, as it was declared among the choices.
+
+        Raises:
+            KeyError: If the study declares no parameter called *name*.
+        """
         return self._lookup(name)
 
     # ------------------------------------------------------------------
@@ -97,7 +113,10 @@ class Trial:
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:  # pragma: no cover - cosmetic
-        return f"Trial(number={self.number}, trial_id={self.trial_id!r}, params={self.params!r})"
+        return (
+            f"Trial(number={self.number}, trial_id={self.trial_id!r}, "
+            f"params={self.params!r})"
+        )
 
     def __getitem__(self, name: str) -> Any:
         return self._lookup(name)
@@ -106,6 +125,7 @@ class Trial:
         return name in self.params
 
     def keys(self) -> List[str]:
+        """Return the names of the parameters of this trial."""
         return list(self.params.keys())
 
     # ------------------------------------------------------------------
@@ -120,6 +140,14 @@ class Trial:
                 f"parameter {name!r} was not declared in this study's spec; "
                 f"declared: {sorted(self.params)}"
             ) from exc
+
+    @staticmethod
+    def _type_message(name: str, value: Any, expected: str) -> str:
+        return (
+            f"parameter {name!r} holds {value!r} ({type(value).__name__}), "
+            f"which is not {expected}; use the sampled_* accessor that matches "
+            "how the parameter was declared in the study"
+        )
 
 
 __all__ = ["Trial"]

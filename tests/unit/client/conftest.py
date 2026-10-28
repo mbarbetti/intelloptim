@@ -9,11 +9,14 @@ integration suite, which can import both the client and the server.
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
 import pytest
 
 import intelloptim as intopt
+from intelloptim.core.parameters import ParameterSpec
+from intelloptim.core.samplers import SamplerSpec
 
 
 @pytest.fixture
@@ -28,10 +31,28 @@ def token() -> str:
 
 
 @pytest.fixture
-def simple_parameters() -> List[intopt.params.Parameter]:
+def simple_parameters() -> List[ParameterSpec]:
     return [intopt.params.Float("x", -10.0, 10.0)]
 
 
 @pytest.fixture
-def simple_sampler() -> intopt.samplers.Sampler:
-    return intopt.samplers.TPE(seed=42)
+def simple_sampler() -> SamplerSpec:
+    return intopt.samplers.TPESamplerSpec(seed=42)
+
+
+@pytest.fixture
+def log_records(caplog):
+    """Capture records of the ``intelloptim`` logger.
+
+    ``configure_logging`` turns off propagation on that logger, so pytest's
+    root-level handler would not see them; attach it directly instead.
+    """
+    package_logger = logging.getLogger("intelloptim")
+    package_logger.addHandler(caplog.handler)
+    previous = package_logger.level
+    package_logger.setLevel(logging.WARNING)
+    try:
+        yield caplog
+    finally:
+        package_logger.removeHandler(caplog.handler)
+        package_logger.setLevel(previous)

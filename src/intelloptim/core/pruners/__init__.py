@@ -14,8 +14,11 @@ Typical usage::
 
     import intelloptim as intopt
 
-    pruner = intopt.pruners.MedianPrunerSpec(n_startup_trials=5, n_warmup_steps=10)
-    study = client.create_study(..., pruner=pruner)
+    pruner_spec = intopt.pruners.MedianPrunerSpec(
+        n_startup_trials=5,
+        n_warmup_steps=10,
+    )
+    study = client.create_study(..., pruner_spec=pruner_spec)
 
 Sub-modules:
 
