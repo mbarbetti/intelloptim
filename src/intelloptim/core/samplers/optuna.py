@@ -109,7 +109,7 @@ class TPESamplerSpec(BaseSamplerSpec):
 
 
 class GPSamplerSpec(BaseSamplerSpec):
-    """Gaussian-process Bayesian optimisation sampler.
+    """Gaussian-process (GP) sampler.
 
     Fits a GP surrogate to observed trials and maximises an acquisition
     function to suggest the next point. Best suited for low-dimensional
@@ -176,7 +176,7 @@ class NSGAIISamplerSpec(BaseSamplerSpec):
 
 
 class QMCSamplerSpec(BaseSamplerSpec):
-    """Quasi-Monte Carlo sampler using low-discrepancy sequences.
+    """Quasi-Monte Carlo (QMC) sampler using low-discrepancy sequences.
 
     Unlike pseudo-random sampling, QMC sequences fill the parameter space
     more uniformly, typically yielding better coverage for the same number

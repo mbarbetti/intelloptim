@@ -45,7 +45,7 @@ from intelloptim.core.samplers.base import (
 
 
 class SASamplerSpec(BaseSamplerSpec):
-    """Simulated annealing sampler for single-objective studies.
+    """Simulated annealing (SA) sampler for single-objective studies.
 
     Each trial is a random neighbour of the current accepted point. A completed
     trial becomes the new current point if it is at least as good, or otherwise

@@ -20,4 +20,15 @@ class SamplerNotImplementedError(NotImplementedError):
     """
 
 
-__all__ = ["SamplerNotImplementedError"]
+class SamplerDependencyError(ImportError):
+    """Raised when a sampler needs a package that is not installed.
+
+    Some Optuna-backed samplers rely on optional packages (``GP`` needs
+    ``torch`` and ``scipy``, ``QMC`` needs ``scipy``). Without this check they
+    resolve fine and fail on the first ask with a bare ``ModuleNotFoundError``.
+    The message names the missing packages and the extra that installs them,
+    for example ``pip install "intelloptim[gp]"``.
+    """
+
+
+__all__ = ["SamplerDependencyError", "SamplerNotImplementedError"]

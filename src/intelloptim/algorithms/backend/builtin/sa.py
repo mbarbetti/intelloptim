@@ -1,4 +1,4 @@
-"""Simulated annealing sampler.
+"""Simulated annealing (SA) sampler.
 
 :class:`SASampler` is configured by
 :class:`~intelloptim.core.samplers.builtin.SASamplerSpec`. It keeps no state
@@ -37,7 +37,7 @@ _TAG_INDEPENDENT = 3
 
 
 class SASampler(BaseSampler):
-    """Simulated annealing sampler for single-objective studies.
+    """Simulated annealing (SA) sampler for single-objective studies.
 
     The sampler walks a chain of *accepted* points. Each new trial is a random
     neighbour of the current accepted point. Once a trial completes, it
