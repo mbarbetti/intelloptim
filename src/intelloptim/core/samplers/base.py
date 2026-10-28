@@ -51,9 +51,11 @@ class SamplerKind(str, Enum):
     QMC = "qmc"
     SA = "sa"
     OWG = "owg"
+    SIM_QUANTUM_GAUS = "sim_quantum_gaus"
+    QUANTUM_GAUS = "quantum_gaus"
+    SIM_QUANTUM_MIXTURE = "sim_quantum_mixture"
+    QUANTUM_MIXTURE = "quantum_mixture"
     REMOTE_RANDOM = "remote_random"
-    QUANTUM_QAOA = "quantum_qaoa"
-    QUANTUM_VQE = "quantum_vqe"
 
 
 class RebuildPolicy(BaseModel):

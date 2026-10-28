@@ -35,8 +35,6 @@ from intelloptim.core.samplers import (
     NSGAIISamplerSpec,
     OWGSamplerSpec,
     QMCSamplerSpec,
-    QuantumQAOA,
-    QuantumVQE,
     RandomSamplerSpec,
     SamplerKind,
     SamplerSpec,
@@ -51,12 +49,24 @@ _log = get_logger(__name__)
 _OPTIONAL_DEPENDENCIES: Dict[SamplerKind, Tuple[Tuple[str, ...], str]] = {
     SamplerKind.GP: (("torch", "scipy"), "gp"),
     SamplerKind.QMC: (("scipy",), "qmc"),
+    SamplerKind.SIM_QUANTUM_GAUS: (("qiskit",), "quantum"),
+    SamplerKind.SIM_QUANTUM_MIXTURE: (("qiskit",), "quantum"),
+}
+
+# Hardware samplers depend on their provider, not on their kind: a plugin
+# provider brings (and reports) its own requirements.
+_PROVIDER_DEPENDENCIES: Dict[str, Tuple[Tuple[str, ...], str]] = {
+    "ibm_runtime": (("qiskit", "qiskit_ibm_runtime"), "quantum-ibm"),
 }
 
 
-def _check_dependencies(kind: SamplerKind) -> None:
-    """Raise :class:`SamplerDependencyError` if *kind* lacks a package."""
+def _check_dependencies(spec: Any) -> None:
+    """Raise :class:`SamplerDependencyError` if the sampler lacks a package."""
+    kind = spec.kind
     modules, extra = _OPTIONAL_DEPENDENCIES.get(kind, ((), ""))
+    provider = getattr(spec, "provider", None)
+    if provider is not None:
+        modules, extra = _PROVIDER_DEPENDENCIES.get(provider.provider, ((), ""))
     missing = [m for m in modules if find_spec(m) is None]
     if missing:
         raise SamplerDependencyError(
@@ -130,16 +140,15 @@ def _resolve_owg(
     )
 
 
-def _resolve_quantum_unimplemented(
-    spec: QuantumQAOA | QuantumVQE,
-) -> optuna.samplers.BaseSampler:
-    raise SamplerNotImplementedError(
-        f"No runtime implementation registered for sampler kind "
-        f"{spec.kind.value!r}. Quantum samplers ship as a plugin "
-        f"contract only — install a plugin package that registers one under "
-        f"the 'intelloptim.samplers' entry-point group "
-        f"(see examples/04_quantum_plugin/)."
-    )
+def _resolve_quantum(cls_name: str) -> Callable[[Any], optuna.samplers.BaseSampler]:
+    """Return a resolver that builds the named quantum sampler from its spec."""
+
+    def resolve(spec: Any) -> optuna.samplers.BaseSampler:
+        from intelloptim.algorithms.backend import quantum
+
+        return getattr(quantum, cls_name).from_spec(spec)  # type: ignore[no-any-return]
+
+    return resolve
 
 
 _RESOLVERS: Dict[SamplerKind, Callable[[Any], optuna.samplers.BaseSampler]] = {
@@ -150,8 +159,10 @@ _RESOLVERS: Dict[SamplerKind, Callable[[Any], optuna.samplers.BaseSampler]] = {
     SamplerKind.QMC: _resolve_qmc,
     SamplerKind.SA: _resolve_sa,
     SamplerKind.OWG: _resolve_owg,
-    SamplerKind.QUANTUM_QAOA: _resolve_quantum_unimplemented,
-    SamplerKind.QUANTUM_VQE: _resolve_quantum_unimplemented,
+    SamplerKind.SIM_QUANTUM_GAUS: _resolve_quantum("SimQuantumGausSampler"),
+    SamplerKind.QUANTUM_GAUS: _resolve_quantum("QuantumGausSampler"),
+    SamplerKind.SIM_QUANTUM_MIXTURE: _resolve_quantum("SimQuantumMixtureSampler"),
+    SamplerKind.QUANTUM_MIXTURE: _resolve_quantum("QuantumMixtureSampler"),
 }
 
 
@@ -171,7 +182,7 @@ def resolve_sampler(spec: SamplerSpec) -> optuna.samplers.BaseSampler:
             implementation registered (currently the quantum stubs, unless a
             plugin provides one).
         SamplerDependencyError: If the sampler needs an optional package that
-            is not installed (``GP``, ``QMC``).
+            is not installed (``GP``, ``QMC``, the quantum policy samplers).
     """
     try:
         resolver = _RESOLVERS[spec.kind]
@@ -179,7 +190,7 @@ def resolve_sampler(spec: SamplerSpec) -> optuna.samplers.BaseSampler:
         raise SamplerNotImplementedError(
             f"Unknown sampler kind: {spec.kind!r}"
         ) from exc
-    _check_dependencies(spec.kind)
+    _check_dependencies(spec)
     return resolver(spec)
 
 

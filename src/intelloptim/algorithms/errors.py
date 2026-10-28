@@ -12,9 +12,8 @@ class SamplerNotImplementedError(NotImplementedError):
     """Raised when no runtime implementation exists for a sampler kind.
 
     Raised by :func:`~intelloptim.algorithms.samplers.resolve_sampler` when the
-    spec's ``kind`` has no registered resolver. This happens when the kind is
-    a plugin stub (e.g. a quantum sampler) and no plugin provides it, or when
-    the kind is not recognised at all.
+    spec's ``kind`` has no registered resolver, which means the kind is not
+    recognised at all.
 
     Catch this error to detect a missing sampler registration.
     """

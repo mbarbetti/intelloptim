@@ -5,9 +5,10 @@ Implementations here are for samplers whose spec lives in
 :mod:`intelloptim.core.samplers.quantum` and whose runtime logic does not
 simply delegate to an Optuna sampler class.
 
-Each backend module exposes a concrete sampler class that is wired into
-:data:`~intelloptim.algorithms.samplers._RESOLVERS`, either directly or through
-:func:`~intelloptim.algorithms.samplers.load_sampler_plugins`.
+Each module (or package, for the quantum samplers) exposes concrete sampler
+classes that are wired into
+:data:`~intelloptim.algorithms.samplers._RESOLVERS`. A plugin can replace a
+resolver through :func:`~intelloptim.algorithms.samplers.load_sampler_plugins`.
 """
 
 from intelloptim.algorithms.backend.builtin import (

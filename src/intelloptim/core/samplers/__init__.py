@@ -28,8 +28,9 @@ Sub-modules:
 - :mod:`intelloptim.core.samplers.builtin` — specs for intelloptim's own
   (non-Optuna) samplers whose runtime logic lives in
   :mod:`intelloptim.algorithms.backend`.
-- :mod:`intelloptim.core.samplers.quantum` — quantum sampler stubs;
-  constructible but require an external plugin to execute.
+- :mod:`intelloptim.core.samplers.quantum` — quantum policy samplers (Gaus and
+  mixture), each as a simulated (``Sim``) and a hardware sampler, with runtime
+  in :mod:`intelloptim.algorithms.backend.quantum`.
 """
 
 from __future__ import annotations
@@ -50,7 +51,14 @@ from intelloptim.core.samplers.optuna import (
     RandomSamplerSpec,
     TPESamplerSpec,
 )
-from intelloptim.core.samplers.quantum import QuantumQAOA, QuantumVQE
+from intelloptim.core.samplers.quantum import (
+    IBMRuntimeProviderSpec,
+    PluginProviderSpec,
+    QuantumGausSamplerSpec,
+    QuantumMixtureSamplerSpec,
+    SimQuantumGausSamplerSpec,
+    SimQuantumMixtureSamplerSpec,
+)
 
 SamplerSpec = Annotated[
     Union[
@@ -61,8 +69,10 @@ SamplerSpec = Annotated[
         QMCSamplerSpec,
         SASamplerSpec,
         OWGSamplerSpec,
-        QuantumQAOA,
-        QuantumVQE,
+        SimQuantumGausSamplerSpec,
+        QuantumGausSamplerSpec,
+        SimQuantumMixtureSamplerSpec,
+        QuantumMixtureSamplerSpec,
     ],
     Field(discriminator="kind"),
 ]
@@ -77,7 +87,11 @@ __all__ = [
     "QMCSamplerSpec",
     "SASamplerSpec",
     "OWGSamplerSpec",
-    "QuantumQAOA",
-    "QuantumVQE",
+    "IBMRuntimeProviderSpec",
+    "PluginProviderSpec",
+    "SimQuantumGausSamplerSpec",
+    "QuantumGausSamplerSpec",
+    "SimQuantumMixtureSamplerSpec",
+    "QuantumMixtureSamplerSpec",
     "SamplerSpec",
 ]

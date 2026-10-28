@@ -8,13 +8,12 @@ from unittest.mock import MagicMock, patch
 import optuna
 import pytest
 
-from intelloptim.algorithms.errors import SamplerNotImplementedError
 from intelloptim.algorithms.samplers import (
     _RESOLVERS,
     load_sampler_plugins,
     resolve_sampler,
 )
-from intelloptim.core.samplers.quantum import QuantumQAOA, QuantumVQE
+from intelloptim.core.samplers import RandomSamplerSpec, SASamplerSpec
 
 
 def _make_ep(name: str, func: Any) -> MagicMock:
@@ -39,24 +38,27 @@ class TestLoadSamplerPlugins:
             return optuna.samplers.RandomSampler(seed=99)
 
         with patch("intelloptim.algorithms.samplers.entry_points") as mock_eps:
-            mock_eps.return_value = [_make_ep("quantum_qaoa", fake_resolve)]
+            mock_eps.return_value = [_make_ep("sa", fake_resolve)]
             load_sampler_plugins()
 
-        result = resolve_sampler(QuantumQAOA())
-        assert isinstance(result, optuna.samplers.RandomSampler)
+        assert isinstance(
+            resolve_sampler(SASamplerSpec()), optuna.samplers.RandomSampler
+        )
 
-    def test_replaces_unimplemented_stub_for_vqe(self) -> None:
-        with pytest.raises(SamplerNotImplementedError):
-            resolve_sampler(QuantumVQE())
-
+    def test_replaces_the_builtin_resolver_of_that_kind_only(self) -> None:
         def fake_resolve(spec: Any) -> optuna.samplers.BaseSampler:
-            return optuna.samplers.RandomSampler()
+            return optuna.samplers.TPESampler()
 
         with patch("intelloptim.algorithms.samplers.entry_points") as mock_eps:
-            mock_eps.return_value = [_make_ep("quantum_vqe", fake_resolve)]
+            mock_eps.return_value = [_make_ep("random", fake_resolve)]
             load_sampler_plugins()
 
-        assert isinstance(resolve_sampler(QuantumVQE()), optuna.samplers.RandomSampler)
+        assert isinstance(
+            resolve_sampler(RandomSamplerSpec()), optuna.samplers.TPESampler
+        )
+        assert not isinstance(
+            resolve_sampler(SASamplerSpec()), optuna.samplers.TPESampler
+        )
 
     def test_spec_object_forwarded_to_resolver(self) -> None:
         received: list[Any] = []
@@ -66,14 +68,12 @@ class TestLoadSamplerPlugins:
             return optuna.samplers.RandomSampler(seed=spec.seed)
 
         with patch("intelloptim.algorithms.samplers.entry_points") as mock_eps:
-            mock_eps.return_value = [_make_ep("quantum_qaoa", capturing_resolve)]
+            mock_eps.return_value = [_make_ep("random", capturing_resolve)]
             load_sampler_plugins()
 
-        spec = QuantumQAOA(reps=3, seed=7)
-        resolve_sampler(spec)
+        resolve_sampler(RandomSamplerSpec(seed=7))
 
         assert len(received) == 1
-        assert received[0].reps == 3
         assert received[0].seed == 7
 
     def test_skips_unknown_kind(self) -> None:
@@ -88,16 +88,17 @@ class TestLoadSamplerPlugins:
     def test_skips_broken_plugin_on_load_error(self) -> None:
         original = dict(_RESOLVERS)
         broken_ep = MagicMock()
-        broken_ep.name = "quantum_qaoa"
-        broken_ep.load.side_effect = ImportError("qiskit not installed")
+        broken_ep.name = "random"
+        broken_ep.load.side_effect = ImportError("dependency not installed")
 
         with patch("intelloptim.algorithms.samplers.entry_points") as mock_eps:
             mock_eps.return_value = [broken_ep]
             load_sampler_plugins()
 
         assert original == _RESOLVERS
-        with pytest.raises(SamplerNotImplementedError):
-            resolve_sampler(QuantumQAOA())
+        assert isinstance(
+            resolve_sampler(RandomSamplerSpec()), optuna.samplers.RandomSampler
+        )
 
     def test_empty_entry_points_leaves_resolvers_unchanged(self) -> None:
         original = dict(_RESOLVERS)
@@ -110,13 +111,15 @@ class TestLoadSamplerPlugins:
 
     def test_idempotent_when_called_twice(self) -> None:
         def fake_resolve(spec: Any) -> optuna.samplers.BaseSampler:
-            return optuna.samplers.RandomSampler(seed=0)
+            return optuna.samplers.TPESampler(seed=0)
 
-        ep = _make_ep("quantum_qaoa", fake_resolve)
+        ep = _make_ep("random", fake_resolve)
         with patch("intelloptim.algorithms.samplers.entry_points") as mock_eps:
             mock_eps.return_value = [ep]
             load_sampler_plugins()
             load_sampler_plugins()
 
-        assert isinstance(resolve_sampler(QuantumQAOA()), optuna.samplers.RandomSampler)
+        assert isinstance(
+            resolve_sampler(RandomSamplerSpec()), optuna.samplers.TPESampler
+        )
         assert ep.load.call_count == 2
