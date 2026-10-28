@@ -14,6 +14,17 @@ already part of the study::
         activation = trial.sampled_categorical("activation")
         return train_and_score(lr, n_layers, activation)
 
+An objective that trains in steps can also stop early. It reports the
+intermediate objective value of each step and asks whether the study's pruner
+wants to continue; the answer comes from the server, which holds the history
+of every other trial::
+
+    for step in range(n_epochs):
+        loss = train_one_epoch(...)
+        trial.report(loss, step)
+        if trial.should_prune():
+            raise intopt.TrialPruned
+
 Coming from Optuna? Here the search space is defined once, when the study is
 created, and not dynamically inside the objective as Optuna's ``suggest_*``
 methods allow. Declare the parameters in
@@ -23,7 +34,11 @@ methods allow. Declare the parameters in
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import math
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+if TYPE_CHECKING:
+    from intelloptim.client.study import StudyHandle
 
 
 class Trial:
@@ -52,6 +67,12 @@ class Trial:
         self.number = number
         self.params: Dict[str, Any] = dict(params)
         self.value: Optional[float] = value
+        # Set by ``StudyHandle.ask``; ``None`` for trials that were not asked
+        # from a study (enqueued, best trial, built by hand), which cannot prune.
+        self._study: Optional["StudyHandle"] = None
+        self._reported: Dict[int, float] = {}
+        self._sent_steps: Set[int] = set()
+        self._pruned = False
 
     # ------------------------------------------------------------------
     # sampled_* accessors
@@ -107,6 +128,82 @@ class Trial:
             KeyError: If the study declares no parameter called *name*.
         """
         return self._lookup(name)
+
+    # ------------------------------------------------------------------
+    # pruning
+    # ------------------------------------------------------------------
+
+    @property
+    def intermediate_values(self) -> Dict[int, float]:
+        """The values reported so far, keyed by step (a copy)."""
+        return dict(self._reported)
+
+    def report(self, value: float, step: int) -> None:
+        """Record an intermediate objective value of this trial.
+
+        The value is only stored locally; it reaches the server with the next
+        :meth:`should_prune`, so reporting at every step costs no request.
+
+        Args:
+            value (float): Intermediate objective value, finite.
+            step (int): Step at which the value was observed, non-negative.
+                Each step can be reported once.
+
+        Raises:
+            ValueError: If *step* is negative or already reported, or *value*
+                is not finite.
+            TypeError: If *step* is not an ``int`` or *value* is not a number
+                (``bool`` is rejected for both).
+        """
+        if isinstance(step, bool) or not isinstance(step, int):
+            raise TypeError(f"step must be an int, got {step!r}")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(f"value must be a number, got {value!r}")
+        if step < 0:
+            raise ValueError(f"step must be non-negative, got {step}")
+        if not math.isfinite(value):
+            raise ValueError(f"value must be finite, got {value!r}")
+        if step in self._reported:
+            raise ValueError(f"step {step} was already reported for this trial")
+        self._reported[step] = float(value)
+
+    def should_prune(self) -> bool:
+        """Ask the server whether the study's pruner wants to stop this trial.
+
+        The values reported since the previous call are sent in a single
+        request, and the answer is the pruner's decision on all of them. If
+        nothing new was reported no request is made and the previous answer
+        (``False`` before the first call) is returned. The call does not count
+        against the call quota.
+
+        Returns:
+            bool: ``True`` if the trial should stop. The usual response is to
+            raise :class:`~intelloptim.client.errors.TrialPruned`.
+
+        Raises:
+            RuntimeError: If the trial did not come from
+                :meth:`~intelloptim.client.study.StudyHandle.ask`.
+            TrialNotFoundError: If the server does not know the trial, or it
+                is no longer running.
+            ConfigDigestMismatchError: If the study configuration on the
+                server differs from this client's.
+            IntelloptimAPIError: For any other error response.
+        """
+        pending = {
+            step: value
+            for step, value in self._reported.items()
+            if step not in self._sent_steps
+        }
+        if not pending:
+            return self._pruned
+        if self._study is None:
+            raise RuntimeError(
+                "should_prune() needs a trial returned by StudyHandle.ask(); "
+                "this trial is not attached to a study"
+            )
+        self._pruned = self._study._should_prune(self, pending)
+        self._sent_steps.update(pending)
+        return self._pruned
 
     # ------------------------------------------------------------------
     # debugging / dict-like access

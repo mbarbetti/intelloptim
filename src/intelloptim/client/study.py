@@ -25,6 +25,17 @@ Two ways of running the loop are available:
 
       study.optimize(objective, n_trials=200)
 
+A trial that trains in steps can be stopped early: the objective reports each
+intermediate value and checks the study's pruner, and
+:meth:`StudyHandle.optimize` records the trial as ``PRUNED``::
+
+    def objective(trial):
+        for step in range(20):
+            trial.report(train_one_epoch(trial.sampled_float("lr")), step)
+            if trial.should_prune():
+                raise intopt.TrialPruned
+        return final_loss
+
 Every request carries the study's ``config_digest``, so the server can detect
 that this client and the study disagree on its configuration.
 """
@@ -39,10 +50,12 @@ from intelloptim._internal.schemas import (
     AskResponse,
     EnqueueRequest,
     EnqueueResponse,
+    ShouldPruneRequest,
+    ShouldPruneResponse,
     TellRequest,
     TrialState,
 )
-from intelloptim.client.errors import InsufficientQuotaError
+from intelloptim.client.errors import InsufficientQuotaError, TrialPruned
 from intelloptim.client.trial import Trial
 
 if TYPE_CHECKING:
@@ -138,11 +151,13 @@ class StudyHandle:
         ).model_dump(mode="json")
         response = self._client._post_json(f"/studies/{self._study_id}/ask", body)
         payload = AskResponse.model_validate(response.json())
-        return Trial(
+        trial = Trial(
             trial_id=payload.trial_id,
             number=payload.number,
             params=payload.params,
         )
+        trial._study = self
+        return trial
 
     def tell(
         self,
@@ -150,7 +165,6 @@ class StudyHandle:
         value: Optional[float] = None,
         *,
         state: TrialState = TrialState.COMPLETE,
-        intermediate_values: Optional[Dict[int, float]] = None,
     ) -> None:
         """Report the outcome of a trial.
 
@@ -161,9 +175,6 @@ class StudyHandle:
                 to ``None``.
             state (TrialState): Final state of the trial. Defaults to
                 ``TrialState.COMPLETE``.
-            intermediate_values (Optional[Dict[int, float]]): Values reported
-                during the trial, keyed by step. They are sent to the server,
-                which does not use them yet. Defaults to ``None``.
 
         Raises:
             ValueError: If *state* is ``COMPLETE`` and no *value* is given.
@@ -183,11 +194,23 @@ class StudyHandle:
             config_digest=self._config_digest,
             value=value,
             state=state,
-            intermediate_values=intermediate_values or {},
         ).model_dump(mode="json")
         self._client._post_json(
             f"/studies/{self._study_id}/trials/{trial.trial_id}/tell", body
         )
+
+    def _should_prune(self, trial: Trial, values: Dict[int, float]) -> bool:
+        """Send the new intermediate *values* of *trial* and return the verdict.
+
+        Called by :meth:`Trial.should_prune`; users do not call it directly.
+        """
+        body = ShouldPruneRequest(
+            config_digest=self._config_digest, intermediate_values=values
+        ).model_dump(mode="json")
+        response = self._client._post_json(
+            f"/studies/{self._study_id}/trials/{trial.trial_id}/should_prune", body
+        )
+        return ShouldPruneResponse.model_validate(response.json()).should_prune
 
     def enqueue(
         self,
@@ -260,7 +283,11 @@ class StudyHandle:
         objective raises an exception that matches *catch*, a warning is
         logged, the trial is reported as ``FAILED`` and the loop moves on to the
         next one. Any other exception is raised immediately, and the trial that
-        was running is left without a result on the server.
+        was running is left without a result on the server. If the objective
+        raises :class:`~intelloptim.client.errors.TrialPruned`, the trial is
+        reported as ``PRUNED`` with the last intermediate value it reported
+        (none if it reported nothing); this is not a failure and is unaffected
+        by *catch*.
 
         Before the first trial, the number of trials is checked against the
         remaining call budget, using the quota snapshot fetched when the study
@@ -310,6 +337,12 @@ class StudyHandle:
             trial = self.ask()
             try:
                 value = float(objective(trial))
+            except TrialPruned:
+                reported = trial.intermediate_values
+                last = reported[max(reported)] if reported else None
+                _log.info(f"trial {trial.trial_id} pruned")
+                self.tell(trial, value=last, state=TrialState.PRUNED)
+                continue
             except Exception as exc:  # noqa: BLE001 - re-raised below
                 if catch is None or not isinstance(exc, catch):
                     raise

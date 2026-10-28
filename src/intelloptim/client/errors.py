@@ -22,6 +22,11 @@ Three errors are raised locally, before any request is sent:
 - :class:`InsufficientQuotaError` — the requested number of trials exceeds the
   remaining call budget.
 - :class:`StudyLimitExceededError` — the active-study cap has been reached.
+
+:class:`TrialPruned` is not an error: it is the signal an objective raises to
+stop a trial that the pruner has given up on. It deliberately does not derive
+from :class:`IntelloptimError`, so that ``except IntelloptimError`` does not
+swallow it.
 """
 
 from __future__ import annotations
@@ -31,6 +36,19 @@ from typing import Optional
 
 class IntelloptimError(Exception):
     """Base class for all intelloptim SDK exceptions."""
+
+
+class TrialPruned(Exception):
+    """Raised by an objective to end a trial that the pruner has stopped.
+
+    :meth:`~intelloptim.client.study.StudyHandle.optimize` catches it, reports
+    the trial as ``PRUNED`` with the last intermediate value reported, and moves
+    on to the next trial. It is not logged as a failure::
+
+        trial.report(loss, step)
+        if trial.should_prune():
+            raise intopt.TrialPruned
+    """
 
 
 class IntelloptimAPIError(IntelloptimError):
@@ -148,4 +166,5 @@ __all__ = [
     "StudyRebuildingError",
     "StudyStoppedError",
     "TrialNotFoundError",
+    "TrialPruned",
 ]
