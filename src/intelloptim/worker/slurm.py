@@ -1,9 +1,10 @@
-"""Worker and site identity for the evaluator worker.
+"""Worker and site ids for ``intelloptim-worker evaluator``.
 
-``intelloptim-worker evaluator`` identifies itself to the server with a worker
-id and a site id built from the SLURM job and array variables, or from the
-host name and process id outside SLURM. The environment is read when the
-functions are called, so importing this module is safe on any machine.
+A worker identifies itself to the server with a worker id, which names the
+process, and a site id, which names the submission or machine it runs on. Both
+are built from the SLURM job variables, or from the host name (and process id)
+outside SLURM. The environment is read when the functions are called, so
+importing this module is safe on any machine.
 """
 
 from __future__ import annotations
@@ -13,20 +14,21 @@ import socket
 
 
 def worker_id(prefix: str = "eval") -> str:
-    """Build a stable worker identifier for this process.
+    """Return an identifier for the current worker process.
 
-    The ID is composed from (in priority order):
-    1. ``SLURM_ARRAY_JOB_ID`` + ``SLURM_ARRAY_TASK_ID`` when inside a SLURM
-       array job — guarantees uniqueness across array tasks.
-    2. ``SLURM_JOB_ID`` when inside a plain SLURM job.
-    3. Hostname + PID as a fallback for local/interactive runs.
+    The id is built from the first of these that is available:
+
+    1. ``SLURM_ARRAY_JOB_ID`` and ``SLURM_ARRAY_TASK_ID``, in an array job:
+       ``<prefix>-slurm-<array job>-<task>``, unique for each array task.
+    2. ``SLURM_JOB_ID``, in a plain SLURM job: ``<prefix>-slurm-<job>``.
+    3. The host name and process id, elsewhere: ``<prefix>-<host>-<pid>``.
 
     Args:
-        prefix (str): Short label placed first in the id. Defaults to
-            ``"eval"``.
+        prefix (str): Label placed first in the id. Defaults to ``"eval"``.
 
     Returns:
-        str: An id safe for use as an HTTP header value and a log field.
+        str: The worker id. It is the same for the lifetime of a SLURM task;
+        outside SLURM it changes with the process.
     """
     array_job = os.environ.get("SLURM_ARRAY_JOB_ID")
     array_task = os.environ.get("SLURM_ARRAY_TASK_ID")
@@ -41,15 +43,20 @@ def worker_id(prefix: str = "eval") -> str:
 
 
 def site_id() -> str:
-    """Build a stable *site* identifier grouping workers by submission or host.
+    """Return an identifier that groups workers by submission or machine.
 
-    Priority: ``SLURM_ARRAY_JOB_ID`` (all array tasks of one submission share
-    a site), then ``SLURM_JOB_ID``, then the hostname for local/interactive
-    runs. Sent as the ``X-Site`` header so the dashboard's federation view can
-    roll individual workers up by the cluster or machine they ran on.
+    The id is built from the first of these that is available:
+
+    1. ``SLURM_ARRAY_JOB_ID``: ``slurm-<array job>``, shared by all the tasks
+       of one array job.
+    2. ``SLURM_JOB_ID``: ``slurm-<job>``.
+    3. The host name, outside SLURM.
+
+    It is sent as the ``X-Site`` header, so the trials of many workers can be
+    grouped by where they ran.
 
     Returns:
-        str: An id safe for use as an HTTP header value.
+        str: The site id.
     """
     array_job = os.environ.get("SLURM_ARRAY_JOB_ID")
     if array_job:

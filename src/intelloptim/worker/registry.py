@@ -1,15 +1,15 @@
-"""Objective import helper for the evaluator CLI.
+"""Resolve the ``--objective`` argument of the evaluator CLI to a callable.
 
-Parses import specs in two forms and returns the resolved callable:
+An import spec has the form ``<where>:<name>``, with ``<where>`` one of:
 
-* ``"module.path:callable_name"`` — standard ``importlib.import_module``
-  path; the colon part before ``:`` is a dotted Python module path.
-* ``"/abs/path/to/file.py:callable_name"`` (or ``"./rel/path.py:name"``) —
-  load a source file by filesystem path; useful when the file lives outside
-  any installed package, for example in a project directory on a cluster.
+* a dotted module path, such as ``"my_package.objectives:run"``, imported with
+  :mod:`importlib`;
+* a path to a Python file, such as ``"/abs/path/objective.py:run"`` or
+  ``"./objective.py:run"``, for code that is not installed as a package, for
+  example a project directory on a cluster.
 
-Importing the module is sufficient to trigger ``@intopt.objective``
-registration side-effects.
+Importing the module also runs its ``@intopt.objective`` decorators, which is
+how the study spec attached to the objective gets registered.
 """
 
 from __future__ import annotations
@@ -17,33 +17,35 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import sys
 import types
 from typing import Any, Callable, cast
 
 
 class ImportSpecError(ValueError):
-    """Raised when an import spec string cannot be parsed or resolved."""
+    """Raised when an import spec is malformed or cannot be resolved."""
 
 
 def import_callable(spec: str) -> Callable[..., Any]:
-    """Import a callable from an import spec string.
+    """Import the callable that an import spec points to.
 
-    Supported forms:
-
-    * ``"package.module:attr_name"`` — standard module import.
-    * ``"/path/to/file.py:attr_name"`` or ``"./rel/file.py:attr_name"`` —
-      load by file path (the module is registered as ``_intopt_<stem>``
-      in ``sys.modules`` to avoid repeated loading).
+    The part before the colon is a file path when it ends with ``.py``,
+    contains a path separator or starts with a dot; otherwise it is a dotted
+    module path. A file is loaded once: later calls for the same file name
+    reuse the module, which is registered in ``sys.modules`` as
+    ``_intopt_<stem>``.
 
     Args:
-        spec (str): Import spec string in one of the two forms above.
+        spec (str): ``"package.module:name"``, ``"/path/to/file.py:name"`` or
+            ``"./relative/file.py:name"``.
 
     Returns:
-        Callable[..., Any]: The resolved callable.
+        Callable[..., Any]: The object called *name* in that module.
 
     Raises:
-        ImportSpecError: If the spec is malformed, the module cannot be
-            imported, or the attribute does not exist on the module.
+        ImportSpecError: If the spec has no colon or an empty part, the module
+            or file cannot be loaded, the module has no such attribute, or the
+            attribute is not callable.
     """
     if ":" not in spec:
         raise ImportSpecError(
@@ -57,7 +59,6 @@ def import_callable(spec: str) -> Callable[..., Any]:
             "or '/path/to/file.py:callable' form"
         )
 
-    # File-path form: module_part ends with .py or is a path-like string.
     is_file_path = (
         module_part.endswith(".py")
         or os.sep in module_part
@@ -88,11 +89,11 @@ def import_callable(spec: str) -> Callable[..., Any]:
 
 
 def _import_from_file(file_path: str) -> types.ModuleType:
-    """Load the Python file at *file_path* as a module and cache it.
+    """Load the Python file at *file_path* as a module, once.
 
     The module is registered in ``sys.modules`` as ``_intopt_<stem>``, so a
-    second call for the same file reuses it. A file that fails to load is
-    removed again, so a later call retries.
+    second call for the same file name reuses it. A file that fails to load is
+    not kept, so a later call tries again.
 
     Args:
         file_path (str): Path of the ``.py`` file, absolute or relative.
@@ -103,8 +104,6 @@ def _import_from_file(file_path: str) -> types.ModuleType:
     Raises:
         ImportSpecError: If the file does not exist or raises while loading.
     """
-    import sys
-
     abs_path = os.path.abspath(file_path)
     if not os.path.isfile(abs_path):
         raise ImportSpecError(f"file not found: {abs_path!r}")
