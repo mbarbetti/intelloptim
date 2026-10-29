@@ -1,0 +1,29 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal example
+      description: Code that reproduces the problem. Remove tokens and private URLs.
+      render: python
+  - type: input
+    id: version
+    attributes:
+      label: intelloptim version
+      placeholder: "python -c 'import intelloptim; print(intelloptim.__version__)'"
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version and operating system
+    validations:
+      required: true

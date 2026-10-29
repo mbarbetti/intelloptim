@@ -1,3 +1,6 @@
+# Hooks for local use: `pre-commit install`. The formatters and the type checker
+# are the ones installed with the `dev` extra (`language: system`), so the
+# versions and the dependencies are the same as in `nox` and in CI.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -11,24 +14,21 @@ repos:
       - id: check-merge-conflict
       - id: debug-statements
 
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
+  - repo: local
     hooks:
       - id: black
-        language_version: python3.12
-        args: ["--line-length=88"]
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
-    hooks:
+        name: black
+        entry: black
+        language: system
+        types: [python]
       - id: ruff
-        args: ["--fix"]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
+        name: ruff
+        entry: ruff check --fix
+        language: system
+        types: [python]
       - id: mypy
+        name: mypy
+        entry: mypy src/intelloptim
+        language: system
+        pass_filenames: false
         files: ^src/intelloptim/
-        additional_dependencies:
-          - "pydantic>=2.6"
-          - "types-requests"

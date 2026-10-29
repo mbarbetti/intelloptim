@@ -1,0 +1,4 @@
+include LICENSE NOTICE README.md CHANGELOG.md
+recursive-include tests *.py
+prune docs
+global-exclude __pycache__ *.py[cod]

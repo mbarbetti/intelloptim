@@ -1,136 +1,103 @@
-# intelloptim (public SDK + algorithm layer) — guidance for Claude
+# intelloptim — project guidance
 
 ## What this repo is
 
-The **open-source** half of intelloptim: the user-facing client SDK, the
-pure domain kernel, the wire protocol, and the optimization **algorithm
-layer** (sampler/pruner resolution + the sampler-plugin contract). A general
-black-box optimization framework built on Optuna's ask/tell API. Evolution
-of **Hopaas** (Barbetti & Anderlini, 2023, [arXiv:2301.05522](https://arxiv.org/abs/2301.05522)).
-Imported as `import intelloptim as intopt`.
+The client SDK and the algorithm layer of **intelloptim**, a general black-box
+optimization framework built on Optuna's ask/tell API (an evolution of
+**Hopaas**, Barbetti & Anderlini, 2023,
+[arXiv:2301.05522](https://arxiv.org/abs/2301.05522)). It contains the user-facing
+client, the pure domain types, the wire protocol, and the sampler/pruner
+resolution including the in-repo sampler runtimes. Imported as
+`import intelloptim as intopt`.
 
-Users `pip install intelloptim` to talk to a running service and to write
-objectives. The service itself (FastAPI orchestrator, auth, dashboard,
-deployment) is the private `intelloptim-server` / `intelloptim-web` repos.
-
-## Related repositories
-
-- **`intelloptim-server`** (private) — the FastAPI service, auth, storage,
-  Celery, the optimizer worker, and the `deploy/` stack. It **depends on
-  this package** and imports algorithm resolution from
-  `intelloptim.algorithms`. It never vendors or forks this kernel.
-- **`intelloptim-web`** (private) — the React dashboard. Its TypeScript wire
-  types are hand-written mirrors of this package's `_internal/schemas.py`.
-
-### Cross-repo consistency contract (identical in all three repos)
-
-The **shared source of truth lives here, in the public repo**:
-- `_internal/schemas.py` — the pydantic wire models + `API_VERSION`.
-- `_internal/hashing.py` — `study_identity` / content-addressed `study_id`
-  + `config_digest`. **Byte-stable** across processes or federation breaks
-  silently.
-- the sampler union `SamplerSpec` (`core/samplers/__init__.py`, consumed by
-  `_internal/schemas.py`) and the pruner union `PrunerSpec`
-  (`core/pruners/__init__.py`).
-
-Changing any of these is a **coordinated, versioned event**: bump
-`API_VERSION`, and update the server (which imports these) and the web app
-(which mirrors the wire types by hand). Adding a new sampler *kind* touches
-`SamplerKind` + `SamplerSpec` + `_RESOLVERS` — all live in *this* repo, so
-it's a single-repo change here, then a server bump.
+Users install it to talk to a running intelloptim server and to write
+objectives. The server and the dashboard are separate projects that depend on
+this package for its domain types, wire schemas, hashing and algorithms.
 
 ## Mental map
 
 ```
 src/intelloptim/
-  _internal/      wire schemas, hashing (federation-critical), logging, audit
+  _internal/      wire schemas (incl. TrialState), hashing (study identity),
+                  logging, audit helpers
   core/           pure domain types — no I/O, only pydantic
     samplers/       base.py (SamplerKind, rebuild policy, base specs),
                     optuna.py (Random/TPE/GP/NSGA-II/QMC specs),
-                    builtin.py (SA/OWG specs), quantum.py (QAOA/VQE stubs)
+                    builtin.py (SA/OWG specs), quantum.py (quantum policy
+                    specs: Gaus/Mixture, simulated "Sim" and hardware)
     pruners/        base.py (PrunerKind), optuna.py (Median/Percentile/
                     Threshold/Nop specs)
-    parameters.py, trial.py (TrialState), objective.py
-  algorithms/     spec -> optuna resolvers (samplers.py, pruners.py) +
-                  load_sampler_plugins() entry-point discovery. Needs optuna.
-    backend/        runtime for non-Optuna samplers (builtin/: one module
-                    per sampler, sa.py and owg.py; quantum.py)
-    protocols.py    SamplerPlugin protocol; errors.py: resolver errors
+    parameters.py, objective.py
+  algorithms/     spec -> optuna resolvers (samplers.py, pruners.py) and
+                  load_sampler_plugins() entry-point discovery
+    backend/        runtime for non-Optuna samplers (builtin/: sa.py, owg.py;
+                    quantum/: gaus.py, mixture.py, commons/ for the
+                    vendor-neutral policy, learner and executors, qiskit/ for
+                    the only Qiskit code)
+    protocols.py, errors.py, space.py
   client/         REST/WS SDK (Client, StudyHandle, Trial, errors) — httpx
-  worker/         `intelloptim-worker` CLI (cli.py) with the `evaluator`
-                  subcommand only (evaluator_cli.py, registry.py, slurm.py)
-  params.py       public facade over core/parameters: the `...Spec` classes
-                  without the suffix (`intopt.params.Float(...)`). Samplers
-                  and pruners are reached through core only: `intopt.samplers`
-                  and `intopt.pruners` are the core packages (`...Spec` names)
+  worker/         `intelloptim-worker` CLI (evaluator subcommand, SLURM helpers)
+  params.py       public facade over core/parameters (`intopt.params.Float`)
   cli.py          minimal top-level `intelloptim` CLI
 ```
 
 ## Hard layering rules
 
-1. **`core/` must be pure.** No `httpx`, `fastapi`, `celery`, `optuna`,
-   no I/O or networking. Only stdlib + pydantic.
-2. **`algorithms/` is the only place Optuna's sampler/pruner *classes* are
+1. **`core/` is pure**: stdlib and pydantic only; no `httpx`, `optuna`, I/O or
+   networking.
+2. **`algorithms/` is the only place Optuna's sampler/pruner classes are
    imported.** `core/` holds specs; `algorithms/` resolves them.
-3. **`_internal/schemas.py` is the only place pydantic wire models cross
-   process boundaries.**
-4. **`_internal/hashing.py` must produce byte-stable output.**
+3. **`_internal/schemas.py` is the only place wire models are defined.**
+4. **`_internal/hashing.py` output is byte-stable.** Golden tests pin it;
+   changing the hashed payload changes every study id.
 5. **`client/` is the only module that talks to a server over HTTP.**
-6. **`core/samplers/quantum.py` is constructible but unimplemented.**
-   Do not implement quantum samplers here — they ship as external plugins.
+6. **Quantum samplers** (`SimQuantumGaus`, `QuantumGaus`, `SimQuantumMixture`,
+   `QuantumMixture`) live in-repo: specs in `core/samplers/quantum.py`, runtime
+   in `algorithms/backend/quantum/`. The `Sim` samplers are ideal; the others
+   run on hardware and are separate kinds on purpose. Specs never carry
+   credentials, and only `algorithms/backend/quantum/qiskit/` imports Qiskit.
 
-## Wire protocol invariants
+## Wire protocol and stability
 
-- Study-scoped requests carry `study_id` in the URL and `config_digest` in
-  the body; **409** on mismatch → `ConfigDigestMismatchError`.
-- **503 + `Retry-After`** from `/ask` → `StudyRebuildingError`.
-- **`/ask` and `/enqueue` return 410** when STOPPED → `StudyStoppedError`.
-- **429** from `/ask` or `/tell` → quota exhausted for this period.
-- Study identity: `study_id = sha256(study_key, name, canonicalized_params,
-  sampler_spec, pruner_spec, direction)` — always via
-  `study_identity(study_key, request)`. `study_key` is an opaque UUID4 per
-  user (or group) resolved server-side; multiple tokens owned by the same
-  user always produce the same `study_id` for the same spec.
-- `Client.create_study` accepts the server-returned `study_id` directly —
-  no local recomputation or agreement check (server is authoritative).
-- `GET /auth/me` is called lazily on first `create_study`; the response is
-  cached in `Client._who_am_i` (`WhoAmIResponse`) for quota pre-flight
-  checks. A `WARNING` is logged when the budget is limited.
+- The wire models and `API_VERSION` live in `_internal/schemas.py`; the sampler
+  and pruner unions are `SamplerSpec` and `PrunerSpec`. Changing any of them is
+  a versioned event that the server and the dashboard must follow.
+- Study-scoped requests carry `study_id` in the URL and `config_digest` in the
+  body; **409** on mismatch (`ConfigDigestMismatchError`).
+- **503 + `Retry-After`** from `/ask` while a sampler rebuilds
+  (`StudyRebuildingError`). **410** from `/ask` and `/enqueue` when the study is
+  stopped (`StudyStoppedError`). **429** from `/ask` or `/tell` when the quota is
+  exhausted.
+- `POST /studies/{id}/trials/{tid}/should_prune` takes the intermediate values
+  not yet sent and returns `{"should_prune": bool}`; it is not quota-counted.
+- Study identity: `study_id = sha256(study_key, study_name, direction,
+  canonicalized_params, sampler_spec, pruner_spec)`, always computed with
+  `study_identity(study_key, request)`; `study_key` is an opaque per-user or
+  per-group key resolved by the server, never the API token.
+- `trial_id` is an opaque handle; `number` is the position in the study.
 
-## Sampler plugin contract
+## Samplers
 
 To add a **built-in** sampler: add a spec class in `core/samplers/`, add its
-`kind` to `SamplerKind` (`core/samplers/base.py`), add it to the `SamplerSpec`
-union (`core/samplers/__init__.py`), and register a resolver in
-`algorithms/samplers.py:_RESOLVERS`. If it is not a thin wrapper over an
-Optuna sampler, put its runtime in `algorithms/backend/` (see `SASampler`).
-Pruners follow the same pattern (`PrunerKind` / `PrunerSpec` /
-`algorithms/pruners.py:_RESOLVERS`).
+`kind` to `SamplerKind`, add it to the `SamplerSpec` union, and register a
+resolver in `algorithms/samplers.py:_RESOLVERS`. If it is not a thin wrapper
+over an Optuna sampler, put its runtime in `algorithms/backend/`. Pruners follow
+the same pattern.
 
-Built-in samplers must be **stateless**: the orchestrator builds a fresh
-sampler on every ask, so anything an in-memory sampler would remember (e.g.
-the SA temperature and current point) must be rebuilt from the study's trial
-history, with RNGs derived from the seed and trial number.
-`algorithms/backend/builtin/sa.py:SASampler` is the reference implementation.
+Built-in samplers must be **stateless**: the server builds a fresh sampler on
+every ask, so anything an in-memory sampler would remember must be rebuilt from
+the study history (with RNGs derived from the seed and trial number) or from a
+model persisted in the study by `rebuild(study)` (see `OWG`, `SA` and the
+quantum samplers).
 
-To add an **external** sampler (e.g. quantum): register under the
-`intelloptim.samplers` entry-point group; the entry-point *name* must equal
-a `SamplerKind` value and the callable resolves `(spec) ->
-optuna.samplers.BaseSampler`. `load_sampler_plugins()` discovers these.
-Contract + reference plugin: `docs/samplers/quantum_plugin.md` and
-`examples/04_quantum_plugin/`.
+External packages can override the resolver of an existing kind through the
+`intelloptim.samplers` entry-point group, and add a quantum provider through
+`intelloptim.quantum_executors`.
 
-Ships in-repo: `Random`, `TPE`, `GP`, `NSGA-II`, `QMC` (Optuna-backed),
-`SA` (simulated annealing) and `OWG` (objective-weighted Gaussian), both in
-`algorithms/backend/builtin/`, and `QuantumQAOA`/`QuantumVQE`
-(constructible stubs).
-
-`OWG` is the test vehicle for the rebuild plane
-(`BaseRebuildSamplerSpec`: `runs_remote=True` plus a `RebuildPolicy`). Its
-model is fitted by `sampler.rebuild(study)` — called by the server's
-`rebuild_sampler` task — and persisted in the study's user attrs
-(`intopt:owg`); asks only read it. Rebuildable
-samplers should follow this pattern, since asks never share an instance.
+Ships in-repo: `Random`, `TPE`, `GP`, `NSGA-II`, `QMC` (Optuna-backed; `GP`
+needs the `gp` extra, `QMC` the `qmc` extra), `SA`, `OWG`, and the quantum
+policy samplers (extras `quantum`, `quantum-ibm`). A missing optional package
+raises `SamplerDependencyError` naming the extra to install.
 
 ## SDK contract
 
@@ -138,73 +105,74 @@ samplers should follow this pattern, since asks never share an instance.
 import intelloptim as intopt
 with intopt.Client(url="...", token=...) as client:
     study = client.create_study(
-        name="...", direction="minimize",
-        sampler=intopt.samplers.TPESamplerSpec(seed=42),
+        study_name="...", direction="minimize",
+        sampler_spec=intopt.samplers.TPESamplerSpec(seed=42),
         parameters=[intopt.params.Float("x", -10, 10)],
     )
     study.optimize(my_objective, n_trials=50, catch=Exception)
     best = study.best_trial
 ```
+
+- The search space is declared once, in `create_study(parameters=[...])`.
+  Objectives read the sampled values by name: `trial.sampled_float("x")`,
+  `sampled_int`, `sampled_categorical`. There is no `suggest_*`.
 - `tell(state=COMPLETE)` requires `value`; `PRUNED`/`FAILED` accept `None`.
-- `create_study` is idempotent and parallel-safe; `best_trial` is `None`
-  until at least one trial completes.
-- `optimize(n_trials=N)` raises `InsufficientQuotaError` before any server
-  call if `N > calls_remaining` (pre-flight from cached `/auth/me`).
-- `create_study` raises `StudyLimitExceededError` before posting if the user
-  is at the active-study cap (pre-flight from cached `/auth/me`).
+- Early stopping: `trial.report(value, step)` buffers locally,
+  `trial.should_prune()` sends the new values, and the objective raises
+  `intopt.TrialPruned`, which `optimize` records as `PRUNED`.
+- `create_study` is idempotent and parallel-safe; `best_trial` is `None` until
+  one trial completes. `optimize(n_trials=N)` raises `InsufficientQuotaError`
+  before any call if `N` exceeds the remaining calls.
 
-## Error taxonomy (client-side)
-
-| Error | When |
-|---|---|
-| `ConfigDigestMismatchError` | 409 — study config drifted between clients |
-| `StudyRebuildingError` | 503 — sampler rebuild in progress |
-| `StudyStoppedError` | 410 — study is stopped |
-| `InsufficientQuotaError` | Pre-flight: n_trials > calls_remaining |
-| `StudyLimitExceededError` | Pre-flight: at active-study cap |
+Client errors: `ConfigDigestMismatchError` (409), `StudyRebuildingError` (503),
+`StudyStoppedError` (410), `MissingTokenError`, `InsufficientQuotaError`,
+`StudyLimitExceededError`.
 
 ## Testing
 
-- `client/` tests exercise the HTTP/wire layer **without a server** — via
-  `httpx.MockTransport` (`test_error_mapping`) or pure logic
-  (`test_trial`, `test_auth`). The real client↔server round-trip lives in
-  the private `intelloptim-server` integration suite. **Do not add a
-  dependency on the private server here.**
-- Trial params in tests: `trial.suggest_float("x", -1, 1)` or
-  `trial.params["x"]`.
-- Every feature or bug fix ships with `pytest` tests (happy path + edge
-  cases) under `tests/unit/`, written before the task is declared done.
+- `tests/unit/` tests pure logic and never imports third-party quantum SDKs; the
+  quantum samplers run against a numpy executor in `tests/support/`.
+  `tests/integration/` (marker `qiskit`) uses real Qiskit and a stubbed IBM
+  runtime. Tests marked `hardware` hit a real device, are opt-in, and must never
+  run in automation.
+- `client/` tests use `httpx.MockTransport`; there is no dependency on a server.
+- Every feature or fix ships with `pytest` tests (happy path and edge cases).
 
 ## Style
 
-Global preferences apply (Black 88-col, double quotes, `typing.List/Dict/
-Optional`, `os.path`, type hints, **Google-style docstrings** with `Args:` /
-`Returns:` / `Raises:`). Wire schemas in `_internal/schemas.py`;
-no comments unless *why* is non-obvious. Keep `mypy --strict` clean.
+Black (88 columns, double quotes), Ruff, `mypy --strict`. Type hints with
+`typing.List/Dict/Optional/Union`, `os.path` instead of `pathlib`, Google-style
+docstrings with typed `Args:`, `Returns:`, `Raises:`. Comments only for a
+non-obvious *why*. Docstrings describe behaviour for users, not development
+rules.
 
 ## Do not modify without explicit instruction
 
-- `_internal/hashing.py` + `study_identity` (federation breaks silently)
-- `_internal/schemas.py` wire models (versioned change; bump `API_VERSION`)
-- `core/samplers/quantum.py`; the Optuna study-name → `study_id` convention
-- `study_identity` signature — takes `study_key: str` (opaque UUID4), NOT a
-  raw bearer token. The `study_key` is resolved server-side from the token.
-  Swapping back to raw-token hashing silently breaks federation.
+- `_internal/hashing.py` and `study_identity` (study ids and digests depend on
+  the exact bytes hashed).
+- The wire models in `_internal/schemas.py` (versioned change, bump
+  `API_VERSION`).
 
-## Common commands
-
-`PYBIN` (path to the project's conda env `bin/`) is machine-specific and lives
-in the gitignored `.claude/local.md`.
+## Commands
 
 ```bash
-$PYBIN/pip install -e ".[client,dev]"
-$PYBIN/pytest tests/unit -q
-$PYBIN/ruff check src/ tests/
-$PYBIN/black --check src/ tests/ examples/
-$PYBIN/mypy src/intelloptim/
+pip install -e ".[dev]"
+pytest tests/unit -q
+pytest tests/integration -q     # needs the quantum extra
+ruff check src/ tests/
+black --check src/ tests/
+mypy src/intelloptim/
+nox                             # the same checks, across Python versions
 ```
 
-## Project skills
+## Development notes
 
-- `optimization-quantum.md` — `core/samplers/`, `algorithms/`, quantum
-- `docs-loop.md` — docstring + docs/ review after public-surface changes
+The maintainer keeps additional design notes in `.claude/notes/`. They are not
+part of the repository; ask for them when working in these areas:
+
+- samplers and benchmarking (statelessness rules, sampler choice, honest
+  benchmarking)
+- quantum samplers (design, cohort/snapshot mechanics, hardware guards, limits)
+- sampler plugins (entry-point contract, adding a built-in sampler kind)
+- documentation conventions (docstring style, checklist after public-surface
+  changes)
