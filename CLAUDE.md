@@ -39,7 +39,6 @@ src/intelloptim/
   worker/         `intelloptim-worker` CLI (evaluator subcommand, worker and site
                   identity from the SLURM environment)
   params.py       public facade over core/parameters (`intopt.params.Float`)
-  cli.py          minimal top-level `intelloptim` CLI
 ```
 
 ## Hard layering rules
@@ -104,7 +103,7 @@ raises `SamplerDependencyError` naming the extra to install.
 
 ```python
 import intelloptim as intopt
-with intopt.Client(url="...", token=...) as client:
+with intopt.client.Client(url="...", token=...) as client:
     study = client.create_study(
         study_name="...", direction="minimize",
         sampler_spec=intopt.samplers.TPESamplerSpec(seed=42),
@@ -120,7 +119,7 @@ with intopt.Client(url="...", token=...) as client:
 - `tell(state=COMPLETE)` requires `value`; `PRUNED`/`FAILED` accept `None`.
 - Early stopping: `trial.report(value, step)` buffers locally,
   `trial.should_prune()` sends the new values, and the objective raises
-  `intopt.TrialPruned`, which `optimize` records as `PRUNED`.
+  `intopt.client.errors.TrialPruned`, which `optimize` records as `PRUNED`.
 - `create_study` is idempotent and parallel-safe; `best_trial` is `None` until
   one trial completes. `optimize(n_trials=N)` raises `InsufficientQuotaError`
   before any call if `N` exceeds the remaining calls.

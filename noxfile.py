@@ -76,4 +76,4 @@ def build(session: nox.Session) -> None:
         "-c",
         "import intelloptim; print('intelloptim', intelloptim.__version__)",
     )
-    session.run("intelloptim", "--version")
+    session.run("intelloptim-worker", "--help")

@@ -14,7 +14,7 @@ Typical usage::
 
     import intelloptim as intopt
 
-    with intopt.Client(url="https://intelloptim.local") as client:
+    with intopt.client.Client(url="https://intelloptim.local") as client:
         study = client.create_study(...)
 
 Tests can inject a pre-built ``httpx.Client`` so that they run against an

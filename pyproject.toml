@@ -24,14 +24,22 @@ keywords = [
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Quantum Computing",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 # Base install: everything needed to write an objective and run a study.
@@ -39,7 +47,7 @@ classifiers = [
 #   optuna    the algorithm layer builds Optuna samplers and pruners
 #   numpy     the built-in and quantum samplers
 #   httpx     REST/WS client
-#   click     the `intelloptim` and `intelloptim-worker` commands
+#   click     the `intelloptim-worker` command
 dependencies = [
     "pydantic>=2.6,<3",
     "optuna>=4.0",
@@ -89,7 +97,6 @@ dev = [
 ]
 
 [project.scripts]
-intelloptim = "intelloptim.cli:main"
 intelloptim-worker = "intelloptim.worker.cli:main"
 
 [project.urls]

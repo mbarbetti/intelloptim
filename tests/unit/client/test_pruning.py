@@ -287,9 +287,9 @@ class TestTrialPrunedSignal:
         assert not issubclass(TrialPruned, IntelloptimError)
         assert issubclass(TrialPruned, Exception)
 
-    def test_is_exposed_at_top_level(self) -> None:
-        assert intopt.TrialPruned is TrialPruned
-        assert "TrialPruned" in intopt.__all__
+    def test_is_reached_through_the_client_errors(self) -> None:
+        assert intopt.client.errors.TrialPruned is TrialPruned
+        assert "TrialPruned" not in intopt.__all__
 
     def test_is_listed_in_the_errors_module(self) -> None:
         from intelloptim.client import errors

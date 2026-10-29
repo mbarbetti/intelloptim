@@ -204,9 +204,9 @@ class TestTrialState:
     def test_is_a_string(self) -> None:
         assert TrialState.COMPLETE == "complete"
 
-    def test_exposed_at_the_top_level(self) -> None:
+    def test_exposed_by_the_client_package(self) -> None:
         import intelloptim as intopt
 
-        assert intopt.TrialState is TrialState
-        assert intopt.TrialState.PRUNED.value == "pruned"
-        assert "TrialState" in intopt.__all__
+        assert intopt.client.TrialState is TrialState
+        assert "TrialState" in intopt.client.__all__
+        assert "TrialState" not in intopt.__all__

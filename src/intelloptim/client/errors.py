@@ -47,7 +47,7 @@ class TrialPruned(Exception):
 
         trial.report(loss, step)
         if trial.should_prune():
-            raise intopt.TrialPruned
+            raise intopt.client.errors.TrialPruned
     """
 
 

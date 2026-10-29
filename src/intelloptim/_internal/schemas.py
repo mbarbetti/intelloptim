@@ -32,7 +32,7 @@ class TrialState(str, Enum):
     The string values are part of the wire protocol: the client sends one in
     every ``tell`` request and the server returns one in every ``enqueue``
     response. Only ``COMPLETE``, ``PRUNED`` and ``FAILED`` are valid in a
-    ``tell``. Users reach this enum as ``intelloptim.TrialState``.
+    ``tell``. Users reach this enum as ``intelloptim.client.TrialState``.
     """
 
     WAITING = "waiting"
@@ -186,7 +186,8 @@ class ShouldPruneResponse(BaseModel):
 
     Attributes:
         should_prune (bool): ``True`` if the pruner wants the trial stopped;
-            the objective should then raise ``intelloptim.TrialPruned``.
+            the objective should then raise
+            ``intelloptim.client.errors.TrialPruned``.
     """
 
     model_config = ConfigDict(extra="forbid")

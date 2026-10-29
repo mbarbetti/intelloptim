@@ -1,12 +1,11 @@
 """The ``intelloptim-worker`` console script.
 
-A Click group with one subcommand:
+It has one subcommand, ``evaluator``, which imports an objective and runs
+``study.optimize()`` against a server. Started as the tasks of a SLURM array
+job, many such processes collaborate on one study. See
+:mod:`intelloptim.worker.evaluator_cli` for what a worker does.
 
-* ``evaluator`` — import an objective and run ``study.optimize()`` against a
-  server, for example as one task of a SLURM array job so that many processes
-  collaborate on one study.
-
-The evaluator's heavy imports are deferred until the subcommand runs, so
+The imports the evaluator needs are deferred until the subcommand runs, so
 ``intelloptim-worker --help`` stays fast.
 """
 
@@ -19,7 +18,7 @@ import click
 
 @click.group(name="intelloptim-worker")
 def main() -> None:
-    """Run an intelloptim evaluator worker."""
+    """Run intelloptim workers."""
 
 
 @main.command("evaluator")
@@ -28,7 +27,7 @@ def main() -> None:
     "server",
     required=True,
     envvar="INTELLOPTIM_URL",
-    help="Base URL of the intelloptim server (or set INTELLOPTIM_URL).",
+    help="Base URL of the intelloptim server. Falls back to INTELLOPTIM_URL.",
 )
 @click.option(
     "--import",
@@ -36,9 +35,9 @@ def main() -> None:
     required=True,
     metavar="MODULE:CALLABLE",
     help=(
-        "Dotted import path to the objective callable, e.g. "
-        "'my_pkg.objectives:my_fn'. The module is imported at startup "
-        "which triggers any @intopt.objective registration."
+        "Objective to run: 'my_pkg.objectives:my_fn' or "
+        "'/path/to/objective.py:my_fn'. The module is imported at startup, "
+        "which registers its @intopt.objective study spec."
     ),
 )
 @click.option(
@@ -46,7 +45,10 @@ def main() -> None:
     "token",
     default=None,
     envvar="INTELLOPTIM_TOKEN",
-    help="API bearer token. Falls back to INTELLOPTIM_TOKEN / ~/.config/intelloptim/token.",
+    help=(
+        "API bearer token. Falls back to INTELLOPTIM_TOKEN and then to "
+        "~/.config/intelloptim/token."
+    ),
 )
 @click.option(
     "--spec-file",
@@ -54,8 +56,8 @@ def main() -> None:
     default=None,
     type=click.Path(exists=True, dir_okay=False),
     help=(
-        "Path to a JSON file containing the StudyResolveRequest payload. "
-        "Not required when the objective was decorated with study_spec={{...}}."
+        "JSON file with the study spec (a StudyResolveRequest payload). "
+        "Not needed if the objective was decorated with study_spec={...}."
     ),
 )
 @click.option(
@@ -64,15 +66,15 @@ def main() -> None:
     type=int,
     default=50,
     show_default=True,
-    help="Number of trials this worker process should contribute.",
+    help="Number of trials this worker runs.",
 )
 @click.option(
     "--worker-id",
     "wid",
     default=None,
     help=(
-        "Override the worker identifier sent as X-Worker-Id. "
-        "Auto-derived from SLURM env vars when not set."
+        "Worker id sent as X-Worker-Id. Derived from the SLURM environment, "
+        "or from the host name and process id, when not set."
     ),
 )
 @click.option(
@@ -80,9 +82,9 @@ def main() -> None:
     "site",
     default=None,
     help=(
-        "Override the site identifier sent as X-Site (groups workers by "
-        "cluster/host in the dashboard). Auto-derived from SLURM env vars "
-        "or hostname when not set."
+        "Site id sent as X-Site, which groups workers by cluster or host. "
+        "Derived from the SLURM environment, or from the host name, when "
+        "not set."
     ),
 )
 @click.option(
@@ -90,13 +92,17 @@ def main() -> None:
     default="INFO",
     show_default=True,
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Logging level.",
 )
 @click.option(
     "--no-catch",
     "no_catch",
     is_flag=True,
     default=False,
-    help="Re-raise exceptions from the objective instead of logging and continuing.",
+    help=(
+        "Stop the run when the objective raises, instead of marking that "
+        "trial as failed and continuing."
+    ),
 )
 def evaluator(
     server: str,
@@ -109,7 +115,7 @@ def evaluator(
     loglevel: str,
     no_catch: bool,
 ) -> None:
-    """Run an evaluator loop: import an objective and drive study.optimize()."""
+    """Run an evaluator worker: import an objective and optimise it."""
     from intelloptim.worker.evaluator_cli import run_evaluator
 
     run_evaluator(

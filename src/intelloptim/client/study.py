@@ -33,7 +33,7 @@ intermediate value and checks the study's pruner, and
         for step in range(20):
             trial.report(train_one_epoch(trial.sampled_float("lr")), step)
             if trial.should_prune():
-                raise intopt.TrialPruned
+                raise intopt.client.errors.TrialPruned
         return final_loss
 
 Every request carries the study's ``config_digest``, so the server can detect

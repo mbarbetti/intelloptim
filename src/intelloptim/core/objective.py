@@ -45,7 +45,7 @@ def objective(
         import intelloptim as intopt
 
         @intopt.objective("xgb_classifier")
-        def my_objective(trial: intopt.Trial) -> float:
+        def my_objective(trial: intopt.client.Trial) -> float:
             ...
 
     An optional *study_spec* can be attached so that the evaluator CLI can
@@ -65,7 +65,7 @@ def objective(
                 "pruner_spec": {"kind": "nop"},
             },
         )
-        def pump_calibration(trial: intopt.Trial) -> float:
+        def pump_calibration(trial: intopt.client.Trial) -> float:
             ...
 
     Registering the same callable again under the same name is allowed, so

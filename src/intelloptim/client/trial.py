@@ -8,7 +8,7 @@ anything, and calling an accessor twice returns the same value. The objective
 only needs the name of a parameter, because its range, scale and choices are
 already part of the study::
 
-    def objective(trial: intopt.Trial) -> float:
+    def objective(trial: intopt.client.Trial) -> float:
         lr = trial.sampled_float("lr")
         n_layers = trial.sampled_int("n_layers")
         activation = trial.sampled_categorical("activation")
@@ -23,7 +23,7 @@ of every other trial::
         loss = train_one_epoch(...)
         trial.report(loss, step)
         if trial.should_prune():
-            raise intopt.TrialPruned
+            raise intopt.client.errors.TrialPruned
 
 Coming from Optuna? Here the search space is defined once, when the study is
 created, and not dynamically inside the objective as Optuna's ``suggest_*``
