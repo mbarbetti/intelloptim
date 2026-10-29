@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import tomllib
 from typing import Any, Set
 from unittest.mock import patch
 
@@ -112,7 +113,6 @@ def test_error_is_an_import_error() -> None:
 
 
 def _extras() -> Any:
-    tomllib = pytest.importorskip("tomllib")  # stdlib from Python 3.11
     path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "pyproject.toml")
     with open(path, "rb") as handle:
         return tomllib.load(handle)["project"]["optional-dependencies"]
