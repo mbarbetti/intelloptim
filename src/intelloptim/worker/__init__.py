@@ -1,10 +1,11 @@
-"""Evaluator worker entrypoint.
+"""The ``intelloptim-worker`` command-line tool.
 
-Houses the convenience evaluator CLI shim: it imports a
-``@intopt.objective``-registered callable and drives ``study.optimize()``
-over HTTP, so HPC (e.g. SLURM array) submissions don't have to ship custom
-Python. The heavier optimizer-role Celery worker for ``runs_remote``
-samplers lives in the private ``intelloptim-server`` package.
+``intelloptim-worker evaluator`` runs an objective against a server without a
+driver script: it imports the objective, creates or joins the study and calls
+``study.optimize()``. It is meant for batch systems, for example a SLURM array
+job in which many processes contribute trials to the same study. Each process
+identifies itself to the server with a worker id and a site id derived from the
+SLURM environment (see :mod:`intelloptim.worker.slurm`).
 """
 
 from intelloptim.worker.cli import main

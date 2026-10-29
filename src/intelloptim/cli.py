@@ -1,10 +1,7 @@
-"""Top-level ``intelloptim`` CLI.
+"""The top-level ``intelloptim`` command.
 
-The public package ships a minimal CLI. The server-admin subcommands
-(``server`` / ``user`` / ``token``) and the optimizer worker live in the
-private ``intelloptim-server`` package, which exposes its own
-``intelloptim-server`` console script. The evaluator worker is the separate
-``intelloptim-worker`` console script.
+It only reports the installed version. Running objectives from a batch system
+is the job of the separate ``intelloptim-worker`` command.
 """
 
 from __future__ import annotations

@@ -1,18 +1,13 @@
-"""``intelloptim-worker`` console script.
+"""The ``intelloptim-worker`` console script.
 
-A thin Click dispatcher with one role:
+A Click group with one subcommand:
 
-* ``evaluator`` — convenience loop that imports a user-registered objective
-  and drives ``study.optimize()`` over HTTP. Designed to be submitted as
-  a SLURM array job so N processes collaborate on one study.
+* ``evaluator`` — import an objective and run ``study.optimize()`` against a
+  server, for example as one task of a SLURM array job so that many processes
+  collaborate on one study.
 
-The heavier optimizer role (a Celery worker for ``runs_remote`` samplers)
-lives in the private ``intelloptim-server`` package, not here — it needs
-the server's Celery app, config, and task definitions.
-
-The evaluator defers its heavy imports until the subcommand is selected so
-a minimal install can run ``intelloptim-worker --help`` without pulling in
-httpx.
+The evaluator's heavy imports are deferred until the subcommand runs, so
+``intelloptim-worker --help`` stays fast.
 """
 
 from __future__ import annotations
