@@ -1,7 +1,6 @@
 # GenAI tools
-.claude/settings*
-.claude/local.md
-.impeccable/
+.claude/
+AGENTS.md
 
 # Python
 __pycache__/
@@ -10,6 +9,7 @@ __pycache__/
 *.so
 .Python
 *.egg-info/
+.nox/
 *.egg
 .eggs/
 build/
