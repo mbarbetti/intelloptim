@@ -1,9 +1,11 @@
+<!--
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mbarbetti/intelloptim/main/docs/images/intelloptim-logo-white.png">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mbarbetti/intelloptim/main/docs/images/intelloptim-logo-w-bkg.png">
     <img alt="intelloptim" src="https://raw.githubusercontent.com/mbarbetti/intelloptim/main/docs/images/intelloptim-logo-black.png" width="600">
   </picture>
 </div>
+-->
 
 # intelloptim
 
