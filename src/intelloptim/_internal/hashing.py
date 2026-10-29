@@ -1,22 +1,27 @@
-"""Canonical serialization and hashing for content-addressed studies.
+"""Canonical serialisation and hashing that give studies their identity.
 
-Study identity uses an opaque per-entity ``study_key`` (a stable UUID4 hex
-string) rather than the raw API bearer token. The server resolves the token
-to the appropriate ``study_key`` (user-scoped or group-scoped) before
-calling :func:`study_identity`; the SDK never sees or stores the key.
+A study is content-addressed: its id is the SHA-256 of a canonical string built
+from the owner's key, the study name and the full study configuration. Equal
+inputs give equal ids in every process, so independent clients that submit the
+same configuration land on the same study.
 
-This module must produce **byte-identical** output across Python versions,
-OS, and CPU architecture for equivalent inputs. The tests in
-``tests/unit/core/test_hashing.py`` are the authoritative spec; do not
-change the canonicalizer without updating them.
+The owner key (``study_key``) is an opaque, stable identifier of a user or a
+group, never the API token itself; the server resolves it from the token. The
+SDK only computes :func:`config_digest`, the same hash without key and name,
+which it sends with every request so the server can detect a configuration that
+differs between clients.
 
-Rules:
-    * Dict keys are sorted lexicographically at every depth.
-    * Sequences keep their declared order (parameter order is meaningful).
-    * Floats round-trip via :func:`repr` (shortest round-trippable
-      representation; identical across CPython versions).
-    * No whitespace, no trailing newlines, ASCII-only output.
-    * NaN and infinities are rejected; they have no useful study meaning.
+The output is identical across Python versions, operating systems and CPU
+architectures.
+
+Canonical form:
+
+* Dict keys are sorted lexicographically at every depth.
+* Sequences keep their declared order (parameter order is meaningful).
+* Floats are written with :func:`repr` (shortest round-trippable form), so
+  ``1`` and ``1.0`` hash differently.
+* No whitespace and no trailing newline; the output is ASCII only.
+* ``NaN`` and infinities are rejected: they have no useful meaning in a study.
 """
 
 from __future__ import annotations
@@ -32,87 +37,104 @@ _HASH_PREFIX = "suid:"
 
 
 def canonicalize(value: Any) -> str:
-    """Return a byte-stable canonical JSON-like string for *value*.
+    """Serialise *value* to its canonical string.
+
+    The result is valid JSON: dict keys are sorted, non-ASCII characters are
+    escaped as ``\\uXXXX`` and lists and tuples give the same output.
 
     Args:
-        value: A composition of ``None``, ``bool``, ``int``, ``float``,
-            ``str``, ``list``/``tuple``, and ``dict`` with string keys.
-            Pydantic models should be converted with ``model_dump()``
-            before being passed in.
+        value (Any): A composition of ``None``, ``bool``, ``int``, ``float``,
+            ``str``, ``list``/``tuple`` and mappings with ``str`` keys. Convert
+            pydantic models with ``model_dump(mode="json")`` first.
 
     Returns:
-        The canonical string representation. Always ASCII; no whitespace.
+        str: The canonical string: ASCII only, no whitespace.
 
     Raises:
-        TypeError: If *value* contains a type that is not in the
-            supported set (e.g. ``set``, ``bytes``, custom objects).
-        ValueError: If a ``float`` is ``NaN`` or infinite, or a ``dict``
-            contains a non-string key.
+        TypeError: If *value* contains an unsupported type, for example a
+            ``set``, ``bytes`` or a custom object.
+        ValueError: If a ``float`` is ``NaN`` or infinite, or a mapping has a
+            non-``str`` key.
     """
     return _emit(value)
 
 
 def study_id(
     study_key: str,
-    name: str,
-    parameters: Sequence[Mapping[str, Any]],
-    sampler: Mapping[str, Any],
-    pruner: Mapping[str, Any],
+    study_name: str,
     direction: str,
+    parameters: Sequence[Mapping[str, Any]],
+    sampler_spec: Mapping[str, Any],
+    pruner_spec: Mapping[str, Any],
 ) -> str:
-    """Compute the content-addressed study identifier.
+    """Compute the content-addressed id of a study.
 
-    Two callers that submit equivalent specs with the same ``study_key``
-    produce the same id; any difference (parameter range, sampler kwarg,
-    pruner config, or key) produces a different id by construction.
-
-    The ``study_key`` is an opaque stable UUID4 assigned per-user or
-    per-group by the server. It isolates studies across users/groups
-    without embedding the raw bearer token in the hash.
+    Callers that submit equivalent specifications with the same ``study_key``
+    get the same id. Any difference in the name, direction, parameters, sampler
+    or pruner, or a different key, gives a different id. The key keeps the
+    studies of different users and groups apart without putting the API token in
+    the hash. :func:`study_identity` computes this id, and the digest, directly
+    from a resolve request.
 
     Args:
-        study_key: Opaque stable key (UUID4 hex) for the calling entity.
-            Supplied by the server; never the raw API token.
-        name: Human-readable study label.
-        parameters: Ordered sequence of parameter dicts; each must include
-            ``kind`` plus type-specific fields.
-        sampler: Sampler spec dict (``kind`` + kwargs).
-        pruner: Pruner spec dict (``kind`` + kwargs).
-        direction: ``"minimize"`` or ``"maximize"`` (or a list, for
-            multi-objective).
+        study_key (str): Opaque key (UUID4 hex) of the calling user or group,
+            resolved by the server; never the raw API token.
+        study_name (str): Human-readable study name.
+        direction (str): ``"minimize"`` or ``"maximize"``.
+        parameters (Sequence[Mapping[str, Any]]): Declared search space as
+            parameter dicts in declared order, each with a ``kind`` field.
+        sampler_spec (Mapping[str, Any]): Sampler spec dict (``kind`` plus its
+            settings).
+        pruner_spec (Mapping[str, Any]): Pruner spec dict (``kind`` plus its
+            settings).
 
     Returns:
-        ``"suid:<hex>"`` — 69 characters total.
+        str: ``"suid:"`` followed by 64 hex characters (69 in total).
     """
+    # Key names and values are hashed: renaming one changes every study id.
     payload = {
         "study_key": study_key,
-        "name": name,
-        "parameters": list(parameters),
-        "sampler": dict(sampler),
-        "pruner": dict(pruner),
+        "study_name": study_name,
         "direction": direction,
+        "parameters": list(parameters),
+        "sampler_spec": dict(sampler_spec),
+        "pruner_spec": dict(pruner_spec),
     }
     return _digest(canonicalize(payload))
 
 
 def config_digest(
-    parameters: Sequence[Mapping[str, Any]],
-    sampler: Mapping[str, Any],
-    pruner: Mapping[str, Any],
     direction: str,
+    parameters: Sequence[Mapping[str, Any]],
+    sampler_spec: Mapping[str, Any],
+    pruner_spec: Mapping[str, Any],
 ) -> str:
-    """Compute the per-request config digest (no token mixed in).
+    """Compute the digest of a study configuration, without owner or name.
 
-    The server compares this against the stored study config on every
-    ``ask`` / ``tell`` / ``enqueue`` and returns ``409 Conflict`` on
-    mismatch. Defence-in-depth against silent drift between two clients
-    that nominally share a study.
+    Clients send it with every study request. The server compares it with the
+    digest of the stored configuration and answers ``409 Conflict`` on a
+    mismatch, which catches two clients that think they share a study but hold
+    different configurations. It hashes the same fields as :func:`study_id`
+    minus ``study_key`` and ``study_name``, so it is the same for every owner.
+
+    Args:
+        direction (str): ``"minimize"`` or ``"maximize"``.
+        parameters (Sequence[Mapping[str, Any]]): Declared search space as
+            parameter dicts in declared order.
+        sampler_spec (Mapping[str, Any]): Sampler spec dict (``kind`` plus its
+            settings).
+        pruner_spec (Mapping[str, Any]): Pruner spec dict (``kind`` plus its
+            settings).
+
+    Returns:
+        str: ``"suid:"`` followed by 64 hex characters.
     """
+    # Key names and values are hashed: renaming one changes every digest.
     payload = {
-        "parameters": list(parameters),
-        "sampler": dict(sampler),
-        "pruner": dict(pruner),
         "direction": direction,
+        "parameters": list(parameters),
+        "sampler_spec": dict(sampler_spec),
+        "pruner_spec": dict(pruner_spec),
     }
     return _digest(canonicalize(payload))
 
@@ -120,49 +142,49 @@ def config_digest(
 def study_identity(study_key: str, request: "StudyResolveRequest") -> Tuple[str, str]:
     """Compute ``(study_id, config_digest)`` from a resolve request.
 
-    This is the canonical entry point used **server-side** to derive
-    identifiers. The spec is always serialised through pydantic's
-    ``model_dump(mode="json")`` so that defaults like ``log=False`` are
-    present; constructing the payload from raw dicts produces a different
-    hash and is a bug.
+    The specs are serialised with ``model_dump(mode="json")``, so default values
+    such as ``log=False`` are part of the hash and a spec that relies on a
+    default gets the same id as one that sets it explicitly.
 
     Args:
-        study_key: Opaque stable key for the calling entity (user or group).
-            Resolved server-side from the bearer token — never the raw token.
-        request: A :class:`~intelloptim._internal.schemas.StudyResolveRequest`
-            (or any object with the same shape).
+        study_key (str): Opaque key of the calling user or group, resolved by
+            the server from the bearer token; never the raw token.
+        request (StudyResolveRequest): The resolve request, or any object with
+            the same fields.
 
     Returns:
-        ``(study_id, config_digest)``. ``study_id`` mixes in the
-        ``study_key``; ``config_digest`` does not.
+        Tuple[str, str]: ``(study_id, config_digest)``. Only the id depends on
+        ``study_key`` and the study name.
     """
     parameters = [p.model_dump(mode="json") for p in request.parameters]
-    sampler = request.sampler.model_dump(mode="json")
-    pruner = request.pruner.model_dump(mode="json")
     direction = request.direction
-    sid = study_id(
+    sampler_spec = request.sampler_spec.model_dump(mode="json")
+    pruner_spec = request.pruner_spec.model_dump(mode="json")
+    suid = study_id(
         study_key=study_key,
-        name=request.name,
-        parameters=parameters,
-        sampler=sampler,
-        pruner=pruner,
+        study_name=request.study_name,
         direction=direction,
+        parameters=parameters,
+        sampler_spec=sampler_spec,
+        pruner_spec=pruner_spec,
     )
     digest = config_digest(
-        parameters=parameters,
-        sampler=sampler,
-        pruner=pruner,
         direction=direction,
+        parameters=parameters,
+        sampler_spec=sampler_spec,
+        pruner_spec=pruner_spec,
     )
-    return sid, digest
+    return suid, digest
 
 
 def _digest(canonical: str) -> str:
+    """Return ``"suid:"`` plus the SHA-256 hex digest of a canonical string."""
     h = hashlib.sha256(canonical.encode("ascii")).hexdigest()
     return f"{_HASH_PREFIX}{h}"
 
 
 def _emit(value: Any) -> str:
+    """Serialise one value recursively; see :func:`canonicalize`."""
     if value is None:
         return "null"
     if isinstance(value, bool):
@@ -194,6 +216,12 @@ def _emit(value: Any) -> str:
 
 
 def _emit_string(value: str) -> str:
+    """Quote *value* and escape it to printable ASCII.
+
+    Quote, backslash and the usual control characters use their short escapes;
+    every other character outside ``0x20``-``0x7E`` becomes ``\\uXXXX``, and
+    characters above ``U+FFFF`` a surrogate pair, as in JSON.
+    """
     out = ['"']
     for ch in value:
         code = ord(ch)
@@ -211,9 +239,17 @@ def _emit_string(value: str) -> str:
             out.append("\\r")
         elif ch == "\t":
             out.append("\\t")
+        elif code > 0xFFFF:
+            offset = code - 0x10000
+            high = 0xD800 + (offset >> 10)
+            low = 0xDC00 + (offset & 0x3FF)
+            out.append(f"\\u{high:04x}\\u{low:04x}")
         elif code < 0x20 or code > 0x7E:
             out.append(f"\\u{code:04x}")
         else:
             out.append(ch)
     out.append('"')
     return "".join(out)
+
+
+__all__ = ["config_digest", "study_identity"]

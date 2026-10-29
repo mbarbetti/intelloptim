@@ -61,11 +61,12 @@ def test_samplers_namespace_classical() -> None:
 def test_samplers_namespace_quantum_constructible() -> None:
     import intelloptim as intopt
 
-    q = intopt.samplers.QuantumQAOA(reps=3)
-    assert q.reps == 3
-    assert q.runs_remote is True
-    v = intopt.samplers.QuantumVQE(ansatz="EfficientSU2")
-    assert v.ansatz == "EfficientSU2"
+    sim = intopt.samplers.SimQuantumGausSamplerSpec(n_qubits=4)
+    assert sim.n_qubits == 4 and sim.runs_remote is True
+    hardware = intopt.samplers.QuantumMixtureSamplerSpec(
+        provider={"provider": "ibm_runtime"}, shots=100, max_total_shots=10**7
+    )
+    assert hardware.runs_remote is True
 
 
 def test_objective_decorator() -> None:
@@ -77,7 +78,7 @@ def test_objective_decorator() -> None:
     )
 
     _clear_registry_for_tests()
-    spec = {"name": "toplevel", "direction": "minimize"}
+    spec = {"study_name": "toplevel", "direction": "minimize"}
 
     @intopt.objective("toplevel_toy", study_spec=spec)
     def f(trial):  # noqa: ARG001 - signature placeholder
@@ -91,11 +92,11 @@ def test_objective_decorator() -> None:
 
 def test_trial_is_client_side_wrapper() -> None:
     """``intopt.Trial`` resolves lazily to the client-side wrapper that
-    exposes ``suggest_*`` methods for use inside user objectives."""
+    exposes ``sampled_*`` accessors for use inside user objectives."""
     import intelloptim as intopt
 
     t = intopt.Trial(trial_id="t1", number=0, params={"x": 0.5})
-    assert t.suggest_float("x", -1.0, 1.0) == 0.5
+    assert t.sampled_float("x") == 0.5
     assert t.trial_id == "t1"
 
 

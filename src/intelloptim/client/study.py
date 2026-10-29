@@ -252,7 +252,7 @@ class StudyHandle:
         payload = EnqueueResponse.model_validate(response.json())
         return Trial(
             trial_id=payload.trial_id,
-            number=int(payload.trial_id),
+            number=payload.number,
             params=dict(params),
         )
 

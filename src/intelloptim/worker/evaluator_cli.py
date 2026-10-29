@@ -150,11 +150,11 @@ def run_evaluator(
     )
     with Client(url=server, token=resolved_token, http_client=http_client) as client:
         study = client.create_study(
-            name=spec.name,
+            study_name=spec.study_name,
             direction=spec.direction,
-            sampler=spec.sampler,
             parameters=list(spec.parameters),
-            pruner=spec.pruner,
+            sampler_spec=spec.sampler_spec,
+            pruner_spec=spec.pruner_spec,
         )
         _log.info(
             "study resolved",

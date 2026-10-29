@@ -14,11 +14,11 @@ from intelloptim.core.objective import (
 )
 
 _SPEC: Dict[str, Any] = {
-    "name": "demo",
+    "study_name": "demo",
     "direction": "minimize",
-    "sampler": {"kind": "tpe"},
+    "sampler_spec": {"kind": "tpe"},
     "parameters": [{"kind": "float", "name": "x", "low": -1.0, "high": 1.0}],
-    "pruner": {"kind": "nop"},
+    "pruner_spec": {"kind": "nop"},
 }
 
 
@@ -89,7 +89,7 @@ def test_re_registering_replaces_the_study_spec() -> None:
     def f():
         return 0.0
 
-    newer = {**_SPEC, "name": "newer"}
+    newer = {**_SPEC, "study_name": "newer"}
     objective("replace", study_spec=newer)(f)
     assert get_study_spec("replace") == newer
 
