@@ -275,6 +275,7 @@ class StudyHandle:
         n_trials: int,
         *,
         catch: Optional[type] = Exception,
+        worker_id: Optional[str] = None,
     ) -> None:
         """Run *n_trials* iterations of ask, objective and tell.
 
@@ -303,6 +304,9 @@ class StudyHandle:
                 trial as ``FAILED`` instead of stopping the run. ``None``
                 disables this, so every exception stops the run. Defaults to
                 ``Exception``.
+            worker_id (Optional[str]): Identifier of this client, sent with
+                every ask so the server can attribute trials to it. Defaults
+                to ``None``.
 
         Raises:
             InsufficientQuotaError: If *n_trials* exceeds the remaining call
@@ -334,7 +338,7 @@ class StudyHandle:
                 )
 
         for _ in range(n_trials):
-            trial = self.ask()
+            trial = self.ask(worker_id=worker_id)
             try:
                 value = float(objective(trial))
             except TrialPruned:

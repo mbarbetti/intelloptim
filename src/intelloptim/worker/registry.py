@@ -6,7 +6,7 @@ Parses import specs in two forms and returns the resolved callable:
   path; the colon part before ``:`` is a dotted Python module path.
 * ``"/abs/path/to/file.py:callable_name"`` (or ``"./rel/path.py:name"``) —
   load a source file by filesystem path; useful when the file lives outside
-  any installed package (e.g. the digit-prefixed example directories).
+  any installed package, for example in a project directory on a cluster.
 
 Importing the module is sufficient to trigger ``@intopt.objective``
 registration side-effects.
@@ -36,10 +36,10 @@ def import_callable(spec: str) -> Callable[..., Any]:
       in ``sys.modules`` to avoid repeated loading).
 
     Args:
-        spec: Import spec string in one of the two forms above.
+        spec (str): Import spec string in one of the two forms above.
 
     Returns:
-        The resolved callable.
+        Callable[..., Any]: The resolved callable.
 
     Raises:
         ImportSpecError: If the spec is malformed, the module cannot be
@@ -88,6 +88,21 @@ def import_callable(spec: str) -> Callable[..., Any]:
 
 
 def _import_from_file(file_path: str) -> types.ModuleType:
+    """Load the Python file at *file_path* as a module and cache it.
+
+    The module is registered in ``sys.modules`` as ``_intopt_<stem>``, so a
+    second call for the same file reuses it. A file that fails to load is
+    removed again, so a later call retries.
+
+    Args:
+        file_path (str): Path of the ``.py`` file, absolute or relative.
+
+    Returns:
+        types.ModuleType: The loaded module.
+
+    Raises:
+        ImportSpecError: If the file does not exist or raises while loading.
+    """
     import sys
 
     abs_path = os.path.abspath(file_path)

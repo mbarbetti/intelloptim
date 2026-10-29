@@ -7,6 +7,20 @@ version is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- `intelloptim.worker.slurm` now only provides `worker_id()` and `site_id()`; the
+  sbatch rendering and submission helpers and the sbatch template moved to the
+  `02_distributed_slurm` example.
+- The evaluator finds the study spec attached with `@intopt.objective` from the
+  imported function, whatever name it was registered under
+  (`get_study_spec_for`).
+
+### Added
+
+- `StudyHandle.optimize(..., worker_id=...)` sends the worker id with every ask;
+  the evaluator uses it.
+
 ## [0.1.0] - Unreleased
 
 First public release.

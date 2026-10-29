@@ -31,31 +31,51 @@ _log = get_logger(__name__)
 
 def _load_spec(
     spec_file: Optional[str],
-    import_spec: str,
+    objective_fn: Callable[..., Any],
 ) -> Dict[str, Any]:
-    """Return the study spec dict from *spec_file* or objective metadata."""
+    """Return the study spec dict from *spec_file* or from the objective.
+
+    Args:
+        spec_file (Optional[str]): Path of a JSON file with the study spec, or
+            ``None`` to use the spec attached to the objective.
+        objective_fn (Callable[..., Any]): The imported objective; its spec is
+            the one given with ``study_spec=`` to ``@intopt.objective``.
+
+    Returns:
+        Dict[str, Any]: The raw study spec.
+
+    Raises:
+        RuntimeError: If there is no file and the objective has no spec.
+    """
     if spec_file is not None:
         with open(spec_file) as fh:
             return cast(Dict[str, Any], json.load(fh))
 
-    # Try objective-attached spec (registered via study_spec= kwarg).
-    module_path, _, attr_name = import_spec.partition(":")
-    obj_name = attr_name  # treat attr name as registered objective name
-    from intelloptim.core.objective import get_study_spec
+    from intelloptim.core.objective import get_study_spec_for
 
-    spec = get_study_spec(obj_name)
+    spec = get_study_spec_for(objective_fn)
     if spec is not None:
         return spec
 
+    name = getattr(objective_fn, "__qualname__", repr(objective_fn))
     raise RuntimeError(
-        f"No study spec available for objective {obj_name!r}. "
-        "Either decorate it with study_spec={{...}} in @intopt.objective, "
+        f"No study spec available for objective {name!r}. "
+        "Either register it with study_spec={...} in @intopt.objective, "
         "or pass --spec-file <path/to/spec.json>."
     )
 
 
 def _health_probe(base_url: str, token: str) -> None:
-    """GET /healthz and fail fast with a clear message if unreachable."""
+    """Check that the server answers ``GET /healthz``; exit if it does not.
+
+    Args:
+        base_url (str): Base URL of the server.
+        token (str): API bearer token sent with the request.
+
+    Raises:
+        SystemExit: With status 1 if the server is unreachable or answers with
+            an error status.
+    """
     import httpx
 
     url = base_url.rstrip("/") + "/healthz"
@@ -89,23 +109,36 @@ def run_evaluator(
     loglevel: str = "INFO",
     catch_exceptions: bool = True,
 ) -> None:
-    """Run the evaluator loop.
+    """Import an objective and run it against the server.
+
+    Creates or joins the study described by the spec, then runs
+    ``study.optimize()`` for *n_trials* trials. Every request carries the worker
+    and site ids, so the dashboard can attribute the trials.
 
     Args:
-        server: Base URL of the intelloptim server.
-        import_spec: ``"module.path:callable_name"`` string identifying the
-            objective.
-        token: API bearer token. Falls back to ``INTELLOPTIM_TOKEN`` /
-            ``~/.config/intelloptim/token``.
-        spec_file: Path to a JSON file containing the ``StudyResolveRequest``
-            payload. If ``None``, the spec is read from the objective's
-            ``study_spec`` decorator kwarg.
-        n_trials: Number of trials this process should contribute.
-        wid: Worker ID injected as ``X-Worker-Id`` HTTP header. Auto-derived
-            from SLURM env vars if ``None``.
-        loglevel: Logging level string.
-        catch_exceptions: Whether ``study.optimize()`` should catch and log
-            exceptions rather than re-raising (default ``True``).
+        server (str): Base URL of the intelloptim server.
+        import_spec (str): ``"module.path:callable_name"`` or
+            ``"/path/to/file.py:callable_name"`` identifying the objective.
+        token (Optional[str]): API bearer token. Falls back to
+            ``INTELLOPTIM_TOKEN`` and ``~/.config/intelloptim/token``.
+        spec_file (Optional[str]): Path of a JSON file with the study spec. If
+            ``None``, the spec attached to the objective with
+            ``@intopt.objective(..., study_spec=...)`` is used.
+        n_trials (int): Number of trials this process contributes. Defaults
+            to 50.
+        wid (Optional[str]): Worker id. Derived from the SLURM environment, or
+            from the host name and process id, if ``None``.
+        site (Optional[str]): Site id. Derived from the SLURM environment, or
+            from the host name, if ``None``.
+        loglevel (str): Logging level name. Defaults to ``"INFO"``.
+        catch_exceptions (bool): Whether an exception raised by the objective
+            fails only that trial. If ``False``, it stops the run. Defaults to
+            ``True``.
+
+    Raises:
+        SystemExit: With status 1 if the server health probe fails.
+        RuntimeError: If no study spec is available.
+        ImportSpecError: If the objective cannot be imported.
     """
     from intelloptim._internal.logging import configure_logging
     from intelloptim._internal.schemas import StudyResolveRequest
@@ -136,7 +169,7 @@ def run_evaluator(
     _health_probe(server, resolved_token)
 
     # 3. Load study spec and create/join the study.
-    spec_dict = _load_spec(spec_file, import_spec)
+    spec_dict = _load_spec(spec_file, objective_fn)
     spec = StudyResolveRequest.model_validate(spec_dict)
 
     import httpx
@@ -167,7 +200,9 @@ def run_evaluator(
 
         # 4. Run the optimize loop.
         catch: Any = Exception if catch_exceptions else None
-        study.optimize(objective_fn, n_trials=n_trials, catch=catch)
+        study.optimize(
+            objective_fn, n_trials=n_trials, catch=catch, worker_id=effective_wid
+        )
 
         best = study.best_trial
         if best is not None:

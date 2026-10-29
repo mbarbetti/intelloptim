@@ -36,7 +36,8 @@ src/intelloptim/
                     the only Qiskit code)
     protocols.py, errors.py, space.py
   client/         REST/WS SDK (Client, StudyHandle, Trial, errors) — httpx
-  worker/         `intelloptim-worker` CLI (evaluator subcommand, SLURM helpers)
+  worker/         `intelloptim-worker` CLI (evaluator subcommand, worker and site
+                  identity from the SLURM environment)
   params.py       public facade over core/parameters (`intopt.params.Float`)
   cli.py          minimal top-level `intelloptim` CLI
 ```

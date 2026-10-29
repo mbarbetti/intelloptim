@@ -10,8 +10,9 @@ the decorated functions is imported. Direct SDK users — those calling
 ``study.optimize(my_func, ...)`` from their own script — do not need it: they
 pass the callable in directly.
 
-Besides :func:`objective` itself, the module offers :func:`get_study_spec` to
-read back the attached specification. Registering a different callable under a
+Besides :func:`objective` itself, the module offers :func:`get_study_spec` and
+:func:`get_study_spec_for` to read back the attached specification, by name or
+from the callable. Registering a different callable under a
 name that is already taken raises :class:`ObjectiveAlreadyRegisteredError`.
 """
 
@@ -73,9 +74,8 @@ def objective(
 
     Args:
         name (str): Identifier of the objective. It must be unique within the
-            process. The evaluator CLI finds the attached study spec by the
-            name of the function it imports, so register an objective that
-            carries a *study_spec* under its own function name.
+            process. The evaluator CLI finds the attached study spec from the
+            function it imports, whatever name it was registered under.
         study_spec (Optional[Dict[str, Any]]): Raw study configuration to
             attach to the objective, returned later by :func:`get_study_spec`.
             Defaults to ``None``.
@@ -116,6 +116,23 @@ def get_study_spec(name: str) -> Optional[Dict[str, Any]]:
     return _SPEC_REGISTRY.get(name)
 
 
+def get_study_spec_for(func: Callable[..., Any]) -> Optional[Dict[str, Any]]:
+    """Return the study spec attached to the registered callable *func*.
+
+    Args:
+        func (Callable[..., Any]): A callable registered with
+            :func:`objective`, under any name.
+
+    Returns:
+        Optional[Dict[str, Any]]: The raw spec passed as ``study_spec``, or
+        ``None`` if *func* is not registered or has no spec attached.
+    """
+    for name, registered in _REGISTRY.items():
+        if registered is func:
+            return _SPEC_REGISTRY.get(name)
+    return None
+
+
 def _clear_registry_for_tests() -> None:
     """Test-only helper to wipe the registry between cases."""
     _REGISTRY.clear()
@@ -124,5 +141,6 @@ def _clear_registry_for_tests() -> None:
 
 __all__ = [
     "get_study_spec",
+    "get_study_spec_for",
     "objective",
 ]
