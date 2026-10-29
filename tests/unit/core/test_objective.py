@@ -10,6 +10,7 @@ from intelloptim.core.objective import (
     ObjectiveAlreadyRegisteredError,
     _clear_registry_for_tests,
     get_study_spec,
+    get_study_spec_for,
     objective,
 )
 
@@ -113,3 +114,24 @@ def test_clear_registry_for_tests() -> None:
 
     # The name is free again, for a different callable.
     objective("gone")(lambda: 1.0)
+
+
+def test_get_study_spec_for_finds_the_spec_whatever_the_registered_name() -> None:
+    @objective("registered-name", study_spec=_SPEC)
+    def fn(trial) -> float:  # type: ignore[no-untyped-def]
+        return 0.0
+
+    assert fn.__name__ != "registered-name"
+    assert get_study_spec_for(fn) == _SPEC
+
+
+def test_get_study_spec_for_is_none_without_a_spec_or_registration() -> None:
+    @objective("no-spec")
+    def registered(trial) -> float:  # type: ignore[no-untyped-def]
+        return 0.0
+
+    def unregistered(trial) -> float:  # type: ignore[no-untyped-def]
+        return 0.0
+
+    assert get_study_spec_for(registered) is None
+    assert get_study_spec_for(unregistered) is None
