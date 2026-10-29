@@ -4,7 +4,7 @@ These utilities are used by:
 
 * ``intelloptim-worker evaluator`` — to self-identify with a stable worker ID
   derived from SLURM job/array env vars.
-* ``examples/02_distributed_slurm/submit.py`` — to render and submit the
+* ``02_distributed_slurm/submit.py`` (``intelloptim-examples`` repo) — to render and submit the
   sbatch template.
 
 None of this code assumes a SLURM environment at *import* time; all SLURM

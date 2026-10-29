@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterator
+from typing import Iterator, List
 
 import pytest
 
@@ -123,6 +123,32 @@ class TestConfigureLogging:
         # configure_logging ran with defaults; root logger has handlers.
         root = logging.getLogger(ROOT_LOGGER_NAME)
         assert root.handlers
+
+    @pytest.mark.parametrize(
+        ("requested", "expected"),
+        [
+            ("module.x", "intelloptim.module.x"),
+            ("intelloptim", "intelloptim"),
+            ("intelloptim.client.api", "intelloptim.client.api"),
+            # Sibling packages sharing the prefix are not inside the tree.
+            ("intelloptim_server.app", "intelloptim.intelloptim_server.app"),
+            ("intelloptimx", "intelloptim.intelloptimx"),
+        ],
+    )
+    def test_get_logger_namespacing(self, requested: str, expected: str) -> None:
+        assert get_logger(requested).name == expected
+
+    def test_sibling_package_records_reach_the_handlers(self) -> None:
+        configure_logging(level="DEBUG", format="json", force=True)
+        seen: List[str] = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                seen.append(record.name)
+
+        logging.getLogger(ROOT_LOGGER_NAME).addHandler(_Capture())
+        get_logger("intelloptim_server.app").info("hello")
+        assert seen == ["intelloptim.intelloptim_server.app"]
 
     def test_file_handler_emits_json(self, tmp_path) -> None:
         log_file = tmp_path / "intelloptim.log"
