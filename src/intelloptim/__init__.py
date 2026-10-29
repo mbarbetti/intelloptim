@@ -6,10 +6,10 @@ The recommended import alias is::
 
 Public surface:
 
-- ``intopt.Client`` — REST/WS client (lazy import; requires the ``[client]``
-  extra at install time, but already shipped in this build).
-- ``intopt.Trial`` — client-side trial wrapper with Optuna-shaped
-  ``suggest_*`` methods, used inside the user's objective.
+- ``intopt.Client`` — REST/WS client (imported on first use).
+- ``intopt.Trial`` — client-side trial wrapper whose ``sampled_*`` accessors
+  read the values the server sampled, used inside the user's objective.
+- ``intopt.TrialPruned`` — raised by an objective to end a pruned trial.
 - ``intopt.TrialState`` — lifecycle states for trials.
 - ``intopt.objective`` — decorator that registers a named callable for the
   optional :command:`intelloptim-worker` evaluator runner.
@@ -19,14 +19,16 @@ Public surface:
 
 from typing import TYPE_CHECKING, Any
 
-from . import params, algorithms
+from intelloptim._internal.schemas import TrialState
 from intelloptim.core import pruners, samplers
 from intelloptim.core.objective import objective
-from intelloptim.core.trial import TrialState
 from intelloptim.version import __version__
+
+from . import algorithms, params
 
 if TYPE_CHECKING:
     from intelloptim.client.api import Client
+    from intelloptim.client.errors import TrialPruned
     from intelloptim.client.trial import Trial
 
 
@@ -39,6 +41,10 @@ def __getattr__(name: str) -> Any:
         from intelloptim.client.trial import Trial as _Trial
 
         return _Trial
+    if name == "TrialPruned":
+        from intelloptim.client.errors import TrialPruned as _TrialPruned
+
+        return _TrialPruned
     raise AttributeError(f"module 'intelloptim' has no attribute {name!r}")
 
 
@@ -46,6 +52,7 @@ __all__ = [
     "__version__",
     "Client",
     "Trial",
+    "TrialPruned",
     "TrialState",
     "objective",
     "params",

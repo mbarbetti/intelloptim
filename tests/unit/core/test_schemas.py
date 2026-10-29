@@ -13,15 +13,17 @@ from intelloptim._internal.schemas import (
     EnqueueResponse,
     ParameterSpec,
     SamplerSpec,
+    ShouldPruneRequest,
+    ShouldPruneResponse,
     StudyResolveRequest,
     StudyResolveResponse,
     TellRequest,
+    TrialState,
 )
 from intelloptim.core.parameters import FloatSpec, IntSpec
 from intelloptim.core.pruners import NopPrunerSpec
 from intelloptim.core.samplers.optuna import TPESamplerSpec
-from intelloptim.core.samplers.quantum import QuantumQAOA
-from intelloptim.core.trial import TrialState
+from intelloptim.core.samplers.quantum import SimQuantumGausSamplerSpec
 
 
 def test_api_version_constant() -> None:
@@ -30,39 +32,56 @@ def test_api_version_constant() -> None:
 
 def test_resolve_request_round_trip() -> None:
     req = StudyResolveRequest(
-        name="demo",
+        study_name="demo",
         direction="minimize",
         parameters=[FloatSpec("x", 0.0, 1.0), IntSpec("n", 1, 10)],
-        sampler=TPESamplerSpec(seed=42),
-        pruner=NopPrunerSpec(),
+        sampler_spec=TPESamplerSpec(seed=42),
+        pruner_spec=NopPrunerSpec(),
     )
     revived = StudyResolveRequest.model_validate(req.model_dump(mode="json"))
     assert revived == req
 
 
+def test_resolve_request_fields_match_create_study_arguments() -> None:
+    """The wire body uses the same names and order as ``Client.create_study``."""
+    import inspect
+
+    from intelloptim.client.api import Client
+
+    arguments = [p for p in inspect.signature(Client.create_study).parameters][1:]
+    assert list(StudyResolveRequest.model_fields) == arguments
+    assert arguments == [
+        "study_name",
+        "direction",
+        "parameters",
+        "sampler_spec",
+        "pruner_spec",
+    ]
+
+
 def test_resolve_request_with_quantum_sampler() -> None:
     req = StudyResolveRequest(
-        name="quantum",
+        study_name="quantum",
         direction="minimize",
         parameters=[FloatSpec("x", 0.0, 1.0)],
-        sampler=QuantumQAOA(reps=2),
-        pruner=NopPrunerSpec(),
+        sampler_spec=SimQuantumGausSamplerSpec(n_layers=2),
+        pruner_spec=NopPrunerSpec(),
     )
     dumped = req.model_dump(mode="json")
-    assert dumped["sampler"]["kind"] == "quantum_qaoa"
+    assert dumped["sampler_spec"]["kind"] == "sim_quantum_gaus"
     revived = StudyResolveRequest.model_validate(dumped)
-    assert isinstance(revived.sampler, QuantumQAOA)
+    assert isinstance(revived.sampler_spec, SimQuantumGausSamplerSpec)
 
 
 def test_extra_fields_rejected() -> None:
     with pytest.raises(ValidationError, match="extra"):
         StudyResolveRequest.model_validate(
             {
-                "name": "x",
+                "study_name": "x",
                 "direction": "minimize",
                 "parameters": [],
-                "sampler": {"kind": "tpe"},
-                "pruner": {"kind": "nop"},
+                "sampler_spec": {"kind": "tpe"},
+                "pruner_spec": {"kind": "nop"},
                 "rogue": "field",
             }
         )
@@ -98,6 +117,36 @@ def test_tell_request_pruned_without_value() -> None:
     assert req.value is None
 
 
+def test_tell_request_has_no_intermediate_values() -> None:
+    # Intermediate values travel through ``should_prune``, not ``tell``.
+    with pytest.raises(ValidationError):
+        TellRequest(
+            config_digest="sha256:d",
+            state=TrialState.PRUNED,
+            intermediate_values={0: 1.0},
+        )
+
+
+def test_should_prune_request_roundtrip() -> None:
+    req = ShouldPruneRequest(config_digest="sha256:d", intermediate_values={0: 1.5})
+    wire = req.model_dump(mode="json")
+    # JSON object keys are strings; the model parses them back to ints.
+    assert wire == {"config_digest": "sha256:d", "intermediate_values": {"0": 1.5}}
+    assert ShouldPruneRequest.model_validate(wire) == req
+
+
+def test_should_prune_request_values_default_to_empty() -> None:
+    assert ShouldPruneRequest(config_digest="sha256:d").intermediate_values == {}
+
+
+def test_should_prune_models_forbid_extra_fields() -> None:
+    with pytest.raises(ValidationError):
+        ShouldPruneRequest(config_digest="d", step=1)  # type: ignore[call-arg]
+    with pytest.raises(ValidationError):
+        ShouldPruneResponse(should_prune=True, reason="x")  # type: ignore[call-arg]
+    assert ShouldPruneResponse(should_prune=False).should_prune is False
+
+
 def test_enqueue_request_completed() -> None:
     req = EnqueueRequest(
         config_digest="sha256:d",
@@ -113,8 +162,14 @@ def test_enqueue_request_waiting() -> None:
 
 
 def test_enqueue_response() -> None:
-    r = EnqueueResponse(trial_id="t-1", state=TrialState.WAITING)
+    r = EnqueueResponse(trial_id="t-1", number=3, state=TrialState.WAITING)
     assert r.state is TrialState.WAITING
+    assert r.number == 3
+
+
+def test_enqueue_response_requires_number() -> None:
+    with pytest.raises(ValidationError):
+        EnqueueResponse.model_validate({"trial_id": "t-1", "state": "waiting"})
 
 
 def test_parameter_spec_discriminator_round_trip() -> None:
@@ -130,3 +185,28 @@ def test_sampler_spec_discriminator_round_trip() -> None:
     s = adapter.validate_python({"kind": "tpe", "seed": 7})
     assert isinstance(s, TPESamplerSpec)
     assert s.seed == 7
+
+
+class TestTrialState:
+    def test_wire_values(self) -> None:
+        assert {s.name: s.value for s in TrialState} == {
+            "WAITING": "waiting",
+            "RUNNING": "running",
+            "COMPLETE": "complete",
+            "PRUNED": "pruned",
+            "FAILED": "failed",
+        }
+
+    @pytest.mark.parametrize("state", list(TrialState))
+    def test_round_trip_from_wire_value(self, state: TrialState) -> None:
+        assert TrialState(state.value) is state
+
+    def test_is_a_string(self) -> None:
+        assert TrialState.COMPLETE == "complete"
+
+    def test_exposed_at_the_top_level(self) -> None:
+        import intelloptim as intopt
+
+        assert intopt.TrialState is TrialState
+        assert intopt.TrialState.PRUNED.value == "pruned"
+        assert "TrialState" in intopt.__all__

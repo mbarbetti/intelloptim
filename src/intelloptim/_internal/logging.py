@@ -1,32 +1,33 @@
-"""Logging configuration shared across components.
+"""Logging configuration shared by the SDK, the algorithms and the server.
 
-Two surfaces matter:
+Two kinds of records are emitted, both under the ``intelloptim`` logger tree:
 
-* **Operational** logs — request lifecycle, errors, internal events. Get
-  them via :func:`get_logger` (returns loggers under the
-  ``intelloptim.*`` namespace, plus FastAPI's loggers re-routed for
-  consistency).
-* **Audit** logs — security-relevant events (auth attempts, token CRUD,
-  study state changes). Get them via
-  :func:`intelloptim._internal.audit.get_audit_logger`, which returns a
-  separate ``intelloptim.audit`` logger that can be routed to its own
-  sink via ``INTELLOPTIM_AUDIT_FILE``.
+* **Operational** logs — request lifecycle, errors, internal events. Get a
+  logger with :func:`get_logger`.
+* **Audit** logs — security-relevant events (authentication attempts, token
+  changes, study state changes). They are written through the helpers of
+  :mod:`intelloptim._internal.audit` to the ``intelloptim.audit`` logger, which
+  can be routed to its own file.
 
-Configuration is driven by :class:`~intelloptim.server.config.Settings`
-or the equivalent env vars and is applied exactly once per process by
-:func:`configure_logging`.
+:func:`configure_logging` applies the configuration once per process. Callers
+that want specific settings (the server, the evaluator CLI) call it explicitly
+at start-up; any other caller gets it for free, because :func:`get_logger`
+configures logging on first use from the ``INTELLOPTIM_LOG_LEVEL``,
+``INTELLOPTIM_LOG_FORMAT``, ``INTELLOPTIM_LOG_FILE`` and
+``INTELLOPTIM_AUDIT_FILE`` environment variables.
 
-Format selection:
+Output formats:
 
-* ``json`` — every record is a single JSON object on its own line.
-  Machine-parseable; recommended for production / log shippers.
-* ``console`` — coloured key=value pairs. Human-readable; recommended
-  for local development.
-* ``auto`` (default) — ``console`` when stderr is a TTY, ``json``
-  otherwise. Matches the convention used by ``uvicorn`` / ``structlog``.
+* ``json`` — one JSON object per line. Machine-parseable; use it in
+  production and with log shippers.
+* ``console`` — ``key=value`` pairs, coloured when stderr is a terminal.
+  Human-readable; use it in local development.
+* ``auto`` (default) — ``console`` when stderr is a terminal, ``json``
+  otherwise.
 
-The configured root logger is ``intelloptim`` (not the global root) —
-unrelated libraries' loggers are untouched.
+Only the ``intelloptim`` logger is configured, never the global root logger, so
+the loggers of unrelated libraries are left untouched. :func:`get_logger` places
+every name it is given inside the tree, including the names of sibling packages.
 """
 
 from __future__ import annotations
@@ -73,7 +74,7 @@ _RESERVED_ATTRS = frozenset(
 
 
 def _record_extras(record: logging.LogRecord) -> Dict[str, Any]:
-    """Return the structured payload attached to a record via ``extra=``."""
+    """Return the user-supplied fields of a record (those passed via ``extra=``)."""
     return {
         k: v
         for k, v in record.__dict__.items()
@@ -82,15 +83,23 @@ def _record_extras(record: logging.LogRecord) -> Dict[str, Any]:
 
 
 class JsonFormatter(logging.Formatter):
-    """Emit one JSON object per record.
+    """Format records as single-line JSON objects.
 
-    Standard fields: ``ts`` (ISO-8601 UTC), ``level``, ``logger``,
-    ``message``. Any keyword arguments passed via ``extra=`` are merged
-    in at the top level. Exception info, if present, is emitted as a
-    ``traceback`` field.
+    Every object has ``ts`` (ISO-8601, UTC), ``level``, ``logger`` and
+    ``message``. Fields passed via ``extra=`` are merged in at the top level,
+    and exception information, if any, goes into a ``traceback`` field. Values
+    that are not JSON-serialisable are written with ``str()``.
     """
 
     def format(self, record: logging.LogRecord) -> str:
+        """Render *record* as one JSON line.
+
+        Args:
+            record (logging.LogRecord): The record to format.
+
+        Returns:
+            str: A compact JSON object without a trailing newline.
+        """
         payload: Dict[str, Any] = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
             "level": record.levelname,
@@ -104,11 +113,15 @@ class JsonFormatter(logging.Formatter):
 
 
 class ConsoleFormatter(logging.Formatter):
-    """Human-readable formatter with light ANSI colour when on a TTY.
+    """Format records as one human-readable line, optionally coloured.
 
-    Output shape::
+    Fields passed via ``extra=`` are appended as ``key=value`` pairs sorted by
+    key, and exception information follows on the next lines. Output shape::
 
-        13:42:11.123 INFO  intelloptim.server  message k=v k2=v2
+        13:42:11.123 INFO     intelloptim.client  message k=v k2=v2
+
+    The timestamp is in local time. Colour uses ANSI escape codes, so enable it
+    only for a terminal.
     """
 
     _LEVEL_COLOURS: Dict[str, str] = {
@@ -122,10 +135,23 @@ class ConsoleFormatter(logging.Formatter):
     _DIM = "\x1b[2m"
 
     def __init__(self, *, use_colour: bool) -> None:
+        """Initialise the formatter.
+
+        Args:
+            use_colour (bool): Whether to emit ANSI colour codes.
+        """
         super().__init__()
         self._use_colour = use_colour
 
     def format(self, record: logging.LogRecord) -> str:
+        """Render *record* as one console line.
+
+        Args:
+            record (logging.LogRecord): The record to format.
+
+        Returns:
+            str: The line, followed by the traceback if the record has one.
+        """
         ts = time.strftime("%H:%M:%S", time.localtime(record.created))
         ts_full = f"{ts}.{int(record.msecs):03d}"
         level = record.levelname.ljust(8)
@@ -152,7 +178,17 @@ class ConsoleFormatter(logging.Formatter):
 
 
 def _resolve_format(format_choice: str) -> str:
-    """Resolve ``auto`` to a concrete ``json`` / ``console`` choice."""
+    """Resolve ``auto`` to ``json`` or ``console`` and validate the choice.
+
+    Args:
+        format_choice (str): ``auto``, ``json`` or ``console``, case-insensitive.
+
+    Returns:
+        str: ``json`` or ``console``.
+
+    Raises:
+        ValueError: If *format_choice* is none of the accepted values.
+    """
     choice = format_choice.lower()
     if choice in ("json", "console"):
         return choice
@@ -169,6 +205,17 @@ def _build_handler(
     format_choice: str,
     use_colour: bool,
 ) -> logging.Handler:
+    """Build a stream handler with the formatter matching *format_choice*.
+
+    Args:
+        stream (Any): Text stream to write to, for example ``sys.stderr``.
+        format_choice (str): ``json`` or ``console`` (already resolved).
+        use_colour (bool): Colour switch for the console formatter; ignored for
+            ``json``.
+
+    Returns:
+        logging.Handler: The configured handler.
+    """
     handler = logging.StreamHandler(stream=stream)
     if format_choice == "json":
         handler.setFormatter(JsonFormatter())
@@ -187,21 +234,28 @@ def configure_logging(
 ) -> None:
     """Configure the ``intelloptim`` logger tree.
 
-    Idempotent unless ``force=True``. Called automatically by
-    :func:`get_logger` the first time it's used, and explicitly at
-    server startup by :func:`intelloptim.server.app.create_app`.
+    Does nothing if logging is already configured, unless *force* is set. It is
+    called explicitly at start-up by the server and the evaluator CLI, and
+    implicitly by :func:`get_logger` on first use.
+
+    Operational records go to stderr and, if *file* is given, also to that file.
+    Audit records follow the operational handlers unless *audit_file* is given,
+    in which case they go only to that file, so they are not duplicated.
 
     Args:
-        level: Minimum level for both operational and audit loggers.
-        format: ``auto``, ``json``, or ``console``.
-        file: Optional path. When set, operational logs *also* go to
-            this file (in JSON format regardless of the console choice
-            so they're machine-parseable on disk).
-        audit_file: Optional path for the ``intelloptim.audit`` logger.
-            When unset, audit records flow through the same stderr
-            handler as operational ones with ``event_category=audit``.
-        force: If ``True``, tear down and rebuild the configuration even
-            if it has already been applied.
+        level (str): Minimum level for the operational and audit loggers, for
+            example ``"INFO"``; case-insensitive.
+        format (str): ``auto``, ``json`` or ``console`` (see the module
+            docstring). Applies to stderr only.
+        file (Optional[str]): Path of an additional operational log file. Always
+            JSON, whatever *format* is, so it can be ingested.
+        audit_file (Optional[str]): Path of a dedicated audit log file, always
+            JSON.
+        force (bool): Rebuild the configuration even if it was already applied.
+            Handlers installed by an earlier call are removed (not closed).
+
+    Raises:
+        ValueError: If *format* or *level* is not recognised.
     """
     global _CONFIGURED
     if _CONFIGURED and not force:
@@ -250,14 +304,22 @@ def configure_logging(
 
 
 def get_logger(name: str) -> logging.Logger:
-    """Return a configured logger under the ``intelloptim`` namespace.
+    """Return a logger in the ``intelloptim`` tree, configuring logging if needed.
+
+    The first call in a process applies :func:`configure_logging` with settings
+    read from ``INTELLOPTIM_LOG_LEVEL`` (default ``INFO``),
+    ``INTELLOPTIM_LOG_FORMAT`` (default ``auto``), ``INTELLOPTIM_LOG_FILE`` and
+    ``INTELLOPTIM_AUDIT_FILE``. Later calls only look the logger up.
 
     Args:
-        name: Module name, typically ``__name__``. The leading
-            ``intelloptim.`` prefix is preserved when present.
+        name (str): Logger name, normally ``__name__``. A name that is not
+            ``intelloptim`` itself or inside it (``intelloptim.<...>``) is
+            placed under it as ``intelloptim.<name>``, so a sibling package
+            such as ``intelloptim_server`` still logs through the configured
+            handlers.
 
     Returns:
-        A :class:`logging.Logger` instance.
+        logging.Logger: The logger called *name*.
     """
     if not _CONFIGURED:
         configure_logging(
@@ -266,13 +328,17 @@ def get_logger(name: str) -> logging.Logger:
             file=os.environ.get("INTELLOPTIM_LOG_FILE") or None,
             audit_file=os.environ.get("INTELLOPTIM_AUDIT_FILE") or None,
         )
-    if not name.startswith(ROOT_LOGGER_NAME):
+    if name != ROOT_LOGGER_NAME and not name.startswith(f"{ROOT_LOGGER_NAME}."):
         name = f"{ROOT_LOGGER_NAME}.{name}"
     return logging.getLogger(name)
 
 
 def reset_for_tests() -> None:
-    """Tear down logging configuration. Test-only."""
+    """Remove the handlers and levels installed by :func:`configure_logging`.
+
+    Lets a test start from an unconfigured state, so that the next
+    :func:`get_logger` configures logging again. Not for production code.
+    """
     global _CONFIGURED
     _CONFIGURED = False
     for name in (ROOT_LOGGER_NAME, f"{ROOT_LOGGER_NAME}.audit"):
@@ -283,11 +349,4 @@ def reset_for_tests() -> None:
         logger.propagate = True
 
 
-__all__ = [
-    "ConsoleFormatter",
-    "JsonFormatter",
-    "ROOT_LOGGER_NAME",
-    "configure_logging",
-    "get_logger",
-    "reset_for_tests",
-]
+__all__ = ["ROOT_LOGGER_NAME", "configure_logging", "get_logger"]

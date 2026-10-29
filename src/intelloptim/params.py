@@ -1,6 +1,8 @@
 """Public re-exports for parameter declarations.
 
-Usage::
+The classes in :mod:`intelloptim.core.parameters` are named ``FloatSpec``,
+``IntSpec`` and ``CategoricalSpec`` to make clear that they are declarative
+specs. Here they are exposed under shorter names for building a study::
 
     import intelloptim as intopt
 
@@ -11,12 +13,12 @@ Usage::
     ]
 """
 
-from intelloptim.core.parameters import (
-    Categorical,
-    Float,
-    Int,
-    Parameter,
-    ParameterKind,
-)
+from intelloptim.core.parameters import CategoricalSpec as Categorical
+from intelloptim.core.parameters import FloatSpec as Float
+from intelloptim.core.parameters import IntSpec as Int
 
-__all__ = ["Categorical", "Float", "Int", "Parameter", "ParameterKind"]
+__all__ = [
+    "Float",
+    "Int",
+    "Categorical",
+]

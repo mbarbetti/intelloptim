@@ -253,7 +253,9 @@ def marginal_log_prob(dist: DistState, us: np.ndarray) -> np.ndarray:
     log_normal = -0.5 * (z**2).sum(axis=2) - np.log(dist.sigmas).sum(axis=1)[None, :]
     log_normal = log_normal - 0.5 * dist.means.shape[1] * _LOG_2PI
     log_w = np.log(np.maximum(dist.weights, _FLOOR))[None, :]
-    return np.asarray(np.logaddexp.reduce(log_w + log_normal, axis=1))
+    joint = log_w + log_normal
+    peak = joint.max(axis=1)
+    return np.asarray(peak + np.log(np.exp(joint - peak[:, None]).sum(axis=1)))
 
 
 def log_prob_x(

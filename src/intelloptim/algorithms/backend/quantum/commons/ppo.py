@@ -34,10 +34,10 @@ def advantages(rewards: np.ndarray, mode: str) -> np.ndarray:
     """
     r = np.asarray(rewards, dtype=float)
     if mode == "mean":
-        return r - r.mean()
+        return r - float(r.mean())
     if mode == "standardize":
-        std = r.std()
-        return (r - r.mean()) / std if std > 1e-12 else np.zeros_like(r)
+        std = float(r.std())
+        return (r - float(r.mean())) / std if std > 1e-12 else np.zeros_like(r)
     if mode == "rank":
         if r.size < 2:
             return np.zeros_like(r)

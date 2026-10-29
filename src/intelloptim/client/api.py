@@ -208,10 +208,10 @@ class Client:
         # Compute config_digest locally (no token in this digest).
         params_dicts = [p.model_dump(mode="json") for p in request.parameters]
         local_digest = _config_digest(
-            parameters=params_dicts,
-            sampler=request.sampler_spec.model_dump(mode="json"),
-            pruner=request.pruner_spec.model_dump(mode="json"),
             direction=request.direction,
+            parameters=params_dicts,
+            sampler_spec=request.sampler_spec.model_dump(mode="json"),
+            pruner_spec=request.pruner_spec.model_dump(mode="json"),
         )
         response = self._post_json("/studies/resolve", request.model_dump(mode="json"))
         result = StudyResolveResponse.model_validate(response.json())
