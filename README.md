@@ -43,7 +43,7 @@ Python 3.11 or newer is required.
 ```python
 import intelloptim as intopt
 
-client = intopt.Client(url="https://intelloptim.local", token=...)
+client = intopt.client.Client(url="https://intelloptim.local", token=...)
 
 study = client.create_study(
     study_name="pump-cal-2026-Q2",
@@ -55,7 +55,7 @@ study = client.create_study(
     ],
 )
 
-def objective(trial: intopt.Trial) -> float:
+def objective(trial: intopt.client.Trial) -> float:
     k = trial.sampled_float("k_friction")
     b = trial.sampled_float("bypass_ratio")
     return rms_error_against_telemetry(k, b)
@@ -72,12 +72,12 @@ Training in steps? Report each intermediate value and let the study's pruner
 decide whether to go on (declare one with `pruner_spec=` in `create_study`):
 
 ```python
-def objective(trial: intopt.Trial) -> float:
+def objective(trial: intopt.client.Trial) -> float:
     for epoch in range(20):
         loss = train_one_epoch(trial.sampled_float("lr"))
         trial.report(loss, epoch)
         if trial.should_prune():
-            raise intopt.TrialPruned
+            raise intopt.client.errors.TrialPruned
     return loss
 ```
 

@@ -1,62 +1,51 @@
-"""intelloptim — distributed black-box optimization service.
+"""intelloptim — black-box optimization client, algorithms and wire protocol.
 
 The recommended import alias is::
 
     import intelloptim as intopt
 
-Public surface:
+Ready to use after the import:
 
-- ``intopt.Client`` — REST/WS client (imported on first use).
-- ``intopt.Trial`` — client-side trial wrapper whose ``sampled_*`` accessors
-  read the values the server sampled, used inside the user's objective.
-- ``intopt.TrialPruned`` — raised by an objective to end a pruned trial.
-- ``intopt.TrialState`` — lifecycle states for trials.
-- ``intopt.objective`` — decorator that registers a named callable for the
-  optional :command:`intelloptim-worker` evaluator runner.
-- ``intopt.params`` / ``intopt.pruners`` / ``intopt.samplers`` — declarative
-  specs used to build a study.
+- ``intopt.params``: the parameters that define a search space.
+- ``intopt.samplers`` and ``intopt.pruners``: the specs that configure how a
+  study samples and prunes.
+- ``intopt.objective``: decorator that registers an objective, optionally with
+  its study spec, so that ``intelloptim-worker`` can run it.
+
+Loaded on first access:
+
+- ``intopt.client``: the SDK that talks to a server (``Client``, ``Trial``,
+  ``TrialState``, the ``errors``).
+- ``intopt.algorithms``: resolves specs to Optuna samplers and pruners. It is
+  meant for servers and sampler plugins, and running a study does not need it.
 """
 
+import importlib
 from typing import TYPE_CHECKING, Any
 
-from intelloptim._internal.schemas import TrialState
 from intelloptim.core import pruners, samplers
 from intelloptim.core.objective import objective
 from intelloptim.version import __version__
 
-from . import algorithms, params
+from . import params
 
 if TYPE_CHECKING:
-    from intelloptim.client.api import Client
-    from intelloptim.client.errors import TrialPruned
-    from intelloptim.client.trial import Trial
+    from intelloptim import client
+
+_LAZY_SUBMODULES = frozenset({"algorithms", "client"})
 
 
 def __getattr__(name: str) -> Any:
-    if name == "Client":
-        from intelloptim.client.api import Client as _Client
-
-        return _Client
-    if name == "Trial":
-        from intelloptim.client.trial import Trial as _Trial
-
-        return _Trial
-    if name == "TrialPruned":
-        from intelloptim.client.errors import TrialPruned as _TrialPruned
-
-        return _TrialPruned
-    raise AttributeError(f"module 'intelloptim' has no attribute {name!r}")
+    if name in _LAZY_SUBMODULES:
+        return importlib.import_module(f"{__name__}.{name}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
     "__version__",
-    "Client",
-    "Trial",
-    "TrialPruned",
-    "TrialState",
+    "client",
     "objective",
     "params",
     "pruners",
     "samplers",
-    "algorithms",
 ]

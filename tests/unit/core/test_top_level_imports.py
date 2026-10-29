@@ -91,21 +91,47 @@ def test_objective_decorator() -> None:
 
 
 def test_trial_is_client_side_wrapper() -> None:
-    """``intopt.Trial`` resolves lazily to the client-side wrapper that
-    exposes ``sampled_*`` accessors for use inside user objectives."""
+    """``intopt.client.Trial`` is the client-side wrapper that exposes
+    ``sampled_*`` accessors for use inside user objectives."""
     import intelloptim as intopt
 
-    t = intopt.Trial(trial_id="t1", number=0, params={"x": 0.5})
+    t = intopt.client.Trial(trial_id="t1", number=0, params={"x": 0.5})
     assert t.sampled_float("x") == 0.5
     assert t.trial_id == "t1"
 
 
-def test_client_attribute_lazy() -> None:
-    """``intopt.Client`` is lazily imported via ``__getattr__``; an unrelated
-    attribute access still raises :class:`AttributeError`."""
+@pytest.mark.parametrize("name", ["client", "algorithms"])
+def test_submodules_are_imported_on_first_access(name: str) -> None:
+    """``intopt.client`` and ``intopt.algorithms`` are loaded by
+    ``__getattr__``; an unrelated attribute still raises
+    :class:`AttributeError`."""
     import intelloptim as intopt
 
-    cls = intopt.Client
-    assert cls.__name__ == "Client"
+    module = getattr(intopt, name)
+    assert module.__name__ == f"intelloptim.{name}"
     with pytest.raises(AttributeError):
         _ = intopt.does_not_exist
+
+
+def test_client_objects_are_not_on_the_top_level() -> None:
+    import intelloptim as intopt
+
+    for name in ("Client", "Trial", "TrialPruned", "TrialState"):
+        assert not hasattr(intopt, name)
+        assert name not in intopt.__all__
+    assert intopt.client.Client.__name__ == "Client"
+
+
+def test_importing_intelloptim_does_not_load_the_client_or_algorithms() -> None:
+    import subprocess
+    import sys
+
+    code = (
+        "import sys, intelloptim; "
+        "print(any(m.startswith(('intelloptim.client', 'intelloptim.algorithms', "
+        "'httpx', 'optuna')) for m in sys.modules))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-I", "-c", code], capture_output=True, text=True, check=True
+    )
+    assert out.stdout.strip() == "False"
