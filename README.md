@@ -1,14 +1,44 @@
 <div align="center">
-    <img src="https://raw.githubusercontent.com/mbarbetti/intelloptim/main/.github/images/intelloptim-logo-white.png" width="800"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/mbarbetti/intelloptim/main/docs/images/intelloptim-logo-white.png">
+    <img alt="intelloptim" src="https://raw.githubusercontent.com/mbarbetti/intelloptim/main/docs/images/intelloptim-logo-black.png" width="600">
+  </picture>
 </div>
 
 # intelloptim
 
-A general black-box optimization framework, built on top of
-[Optuna](https://optuna.org/) and exposed as a service. Distributed
-evaluators on any infrastructure (HPC, cloud, on-prem) collaborate on a
-single study via a coordinating server, with a pluggable sampler layer
-that treats classical and quantum samplers uniformly at the API surface.
+[![CI](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml/badge.svg)](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/intelloptim.svg)](https://pypi.org/project/intelloptim/)
+[![Python](https://img.shields.io/pypi/pyversions/intelloptim.svg)](https://pypi.org/project/intelloptim/)
+[![License](https://img.shields.io/pypi/l/intelloptim.svg)](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE)
+
+Distributed black-box optimization built on [Optuna](https://optuna.org/)'s
+ask/tell API. Evaluators on any infrastructure (HPC, cloud, on-prem)
+collaborate on a single study through a coordinating server, and the sampler
+layer treats classical and quantum samplers uniformly.
+
+This package is the client SDK and the sampler layer. It talks to an
+intelloptim server over HTTP; the server itself is not part of this package.
+
+## Installation
+
+```bash
+pip install intelloptim
+```
+
+Samplers with heavier requirements are optional extras:
+
+| Extra | Adds | For |
+|---|---|---|
+| `gp` | `torch`, `scipy` | the Gaussian-process sampler |
+| `qmc` | `scipy` | the quasi-Monte Carlo sampler |
+| `quantum` | `qiskit` | the simulated quantum samplers |
+| `quantum-ibm` | `qiskit-ibm-runtime` | quantum samplers on IBM hardware |
+| `samplers` | `gp`, `qmc`, `quantum` | everything a server needs to resolve any sampler |
+
+Python 3.11 or newer is required.
+
+## Quick start
 
 ```python
 import intelloptim as intopt
@@ -16,9 +46,9 @@ import intelloptim as intopt
 client = intopt.Client(url="https://intelloptim.local", token=...)
 
 study = client.create_study(
-    name="pump-cal-2026-Q2",
+    study_name="pump-cal-2026-Q2",
     direction="minimize",
-    sampler=intopt.samplers.TPE(seed=42),
+    sampler_spec=intopt.samplers.TPESamplerSpec(seed=42),
     parameters=[
         intopt.params.Float("k_friction", 1e-3, 1.0, log=True),
         intopt.params.Float("bypass_ratio", 0.0, 0.3),
@@ -26,13 +56,38 @@ study = client.create_study(
 )
 
 def objective(trial: intopt.Trial) -> float:
-    k = trial.suggest_float("k_friction", 1e-3, 1.0, log=True)
-    b = trial.suggest_float("bypass_ratio", 0.0, 0.3)
+    k = trial.sampled_float("k_friction")
+    b = trial.sampled_float("bypass_ratio")
     return rms_error_against_telemetry(k, b)
 
 study.optimize(objective, n_trials=200)
 print(study.best_trial)
 ```
+
+The search space is declared once, in `create_study`. The objective only
+reads the values the server sampled, by parameter name (`sampled_float`,
+`sampled_int`, `sampled_categorical`).
+
+Training in steps? Report each intermediate value and let the study's pruner
+decide whether to go on (declare one with `pruner_spec=` in `create_study`):
+
+```python
+def objective(trial: intopt.Trial) -> float:
+    for epoch in range(20):
+        loss = train_one_epoch(trial.sampled_float("lr"))
+        trial.report(loss, epoch)
+        if trial.should_prune():
+            raise intopt.TrialPruned
+    return loss
+```
+
+`should_prune()` sends the values reported since the last call in a single
+request and does not count against your call quota.
+
+**Coming from Optuna?** Here the search space is defined once, when the study
+is created, and not dynamically inside the objective as Optuna's `suggest_*`
+methods allow. Declare the parameters in `create_study` and read them back with
+the `sampled_*` accessors.
 
 ## Lineage
 
@@ -45,17 +100,23 @@ calibration, model tuning, etc.) and adds:
 - Federation by content-addressed study identity — independent client
   processes on different infrastructures collaborate on the same study by
   sharing only an API token.
-- A separate optimizer compute plane (Celery + Redis) for samplers whose
-  `ask` step is expensive (heavy Bayesian-optimization surrogates,
-  hybrid quantum-classical loops).
+- A separate optimizer compute plane for samplers whose `ask` step is
+  expensive (heavy Bayesian-optimization surrogates, hybrid quantum-classical
+  loops).
 - Pause / rebuild semantics for samplers that periodically refit on
   accumulated trials.
 - Quantum-classical sampler interchangeability at the API surface.
-- A live monitoring frontend (React) with login, API token CRUD, and
-  Optuna-dashboard-style plots.
-
-See `docs/architecture.md` for the design details.
 
 ## Status
 
-Early development — see `docs/` and the project plan for the current phase.
+Early development (alpha): the API may still change between minor versions.
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each release and
+[CONTRIBUTING.md](CONTRIBUTING.md) to get involved.
+
+## License
+
+Apache-2.0, see [LICENSE](LICENSE).
+
+## Citation
+
+If you use `intelloptim` in academic work, please cite the Hopaas paper above.
