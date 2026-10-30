@@ -1,5 +1,6 @@
 # GenAI tools
 .claude/
+.Codex/
 AGENTS.md
 
 # Python

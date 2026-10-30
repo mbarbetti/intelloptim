@@ -14,6 +14,7 @@ how the study spec attached to the objective gets registered.
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import importlib.util
 import os
@@ -91,9 +92,10 @@ def import_callable(spec: str) -> Callable[..., Any]:
 def _import_from_file(file_path: str) -> types.ModuleType:
     """Load the Python file at *file_path* as a module, once.
 
-    The module is registered in ``sys.modules`` as ``_intopt_<stem>``, so a
-    second call for the same file name reuses it. A file that fails to load is
-    not kept, so a later call tries again.
+    The module is registered in ``sys.modules`` under a name derived from its
+    basename and absolute path, so a second call for the same file reuses it
+    while same-named files in different directories remain distinct. A file
+    that fails to load is not kept, so a later call tries again.
 
     Args:
         file_path (str): Path of the ``.py`` file, absolute or relative.
@@ -109,7 +111,8 @@ def _import_from_file(file_path: str) -> types.ModuleType:
         raise ImportSpecError(f"file not found: {abs_path!r}")
 
     stem = os.path.splitext(os.path.basename(abs_path))[0]
-    mod_name = f"_intopt_{stem}"
+    path_hash = hashlib.sha256(abs_path.encode("utf-8")).hexdigest()[:16]
+    mod_name = f"_intopt_{stem}_{path_hash}"
 
     if mod_name in sys.modules:
         return sys.modules[mod_name]

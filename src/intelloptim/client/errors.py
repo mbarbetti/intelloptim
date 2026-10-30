@@ -19,6 +19,7 @@ An error response from the server is translated by the HTTP status code:
 Three errors are raised locally, before any request is sent:
 
 - :class:`MissingTokenError` — no API token could be found.
+- :class:`InsecureTokenFileError` — the on-disk token file is unsafe to read.
 - :class:`InsufficientQuotaError` — the requested number of trials exceeds the
   remaining call budget.
 - :class:`StudyLimitExceededError` — the active-study cap has been reached.
@@ -81,6 +82,15 @@ class MissingTokenError(IntelloptimError):
     ``INTELLOPTIM_TOKEN`` environment variable and the file
     ``~/.config/intelloptim/token``, in that order, and fails when creating
     the :class:`~intelloptim.client.api.Client` if none of them provides one.
+    """
+
+
+class InsecureTokenFileError(IntelloptimError):
+    """Raised when the on-disk token file cannot be read safely.
+
+    The client refuses token files that are not regular, owner-owned files with
+    no group or other permissions. Use ``INTELLOPTIM_TOKEN`` for secret-manager
+    and container workflows that do not meet this local-file contract.
     """
 
 
@@ -158,6 +168,7 @@ class StudyLimitExceededError(IntelloptimError):
 __all__ = [
     "ConfigDigestMismatchError",
     "InsufficientQuotaError",
+    "InsecureTokenFileError",
     "IntelloptimAPIError",
     "IntelloptimError",
     "MissingTokenError",

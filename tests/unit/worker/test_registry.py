@@ -66,6 +66,18 @@ class TestFilePath:
         assert first.__globals__["COUNT"] == [1]
         assert first.__globals__ is second.__globals__
 
+    def test_same_named_files_in_different_directories_are_distinct(
+        self, tmp_path
+    ) -> None:
+        first_dir = tmp_path / "one"
+        second_dir = tmp_path / "two"
+        first_dir.mkdir()
+        second_dir.mkdir()
+        first = _write(first_dir, "objective.py", "def f():\n    return 'one'\n")
+        second = _write(second_dir, "objective.py", "def f():\n    return 'two'\n")
+        assert import_callable(f"{first}:f")() == "one"
+        assert import_callable(f"{second}:f")() == "two"
+
     def test_missing_file(self, tmp_path) -> None:
         with pytest.raises(ImportSpecError, match="file not found"):
             import_callable(f"{tmp_path}/absent.py:f")
@@ -74,7 +86,7 @@ class TestFilePath:
         path = _write(tmp_path, "broken.py", "raise RuntimeError('boom')\n")
         with pytest.raises(ImportSpecError, match="boom"):
             import_callable(f"{path}:f")
-        assert "_intopt_broken" not in sys.modules
+        assert not any(name.startswith("_intopt_broken_") for name in sys.modules)
         _write(tmp_path, "broken.py", "def f():\n    return 'fixed'\n")
         assert import_callable(f"{path}:f")() == "fixed"
 

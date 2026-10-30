@@ -35,12 +35,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 from typing import Any, Dict, Optional
 
 ROOT_LOGGER_NAME = "intelloptim"
 _CONFIGURED = False
+_SENSITIVE_KEY = re.compile(
+    r"authorization|token|secret|password|passwd|api[_-]?key|credential|cookie",
+    re.IGNORECASE,
+)
+_REDACTED = "[REDACTED]"
 
 # Reserved attribute names on a LogRecord that the json formatter should
 # skip when scraping `extra=` keyword payload.
@@ -76,10 +82,23 @@ _RESERVED_ATTRS = frozenset(
 def _record_extras(record: logging.LogRecord) -> Dict[str, Any]:
     """Return the user-supplied fields of a record (those passed via ``extra=``)."""
     return {
-        k: v
+        k: _redact(v, key=k)
         for k, v in record.__dict__.items()
         if k not in _RESERVED_ATTRS and not k.startswith("_")
     }
+
+
+def _redact(value: Any, *, key: Optional[str] = None) -> Any:
+    """Return *value* with values under sensitive keys replaced."""
+    if key is not None and _SENSITIVE_KEY.search(key):
+        return _REDACTED
+    if isinstance(value, dict):
+        return {str(k): _redact(v, key=str(k)) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact(item) for item in value)
+    return value
 
 
 class JsonFormatter(logging.Formatter):

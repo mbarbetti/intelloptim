@@ -56,6 +56,18 @@ class TestJsonFormatter:
         assert payload["study_id"] == "sha256:abc"
         assert payload["duration_ms"] == 42.5
 
+    def test_sensitive_extras_are_redacted_recursively(self) -> None:
+        record = _make_record()
+        record.authorization = "Bearer secret-token"
+        record.context = {"service": "worker", "credentials": {"api_key": "x"}}
+        payload = json.loads(JsonFormatter().format(record))
+        assert payload["authorization"] == "[REDACTED]"
+        assert payload["context"] == {
+            "service": "worker",
+            "credentials": "[REDACTED]",
+        }
+        assert "secret-token" not in json.dumps(payload)
+
     def test_exception_traceback_included(self) -> None:
         try:
             raise RuntimeError("boom")
@@ -96,6 +108,13 @@ class TestConsoleFormatter:
         record.study_id = "sha256:abc"
         line = ConsoleFormatter(use_colour=False).format(record)
         assert "study_id=sha256:abc" in line
+
+    def test_sensitive_extras_are_redacted(self) -> None:
+        record = _make_record()
+        record.token = "secret-token"
+        line = ConsoleFormatter(use_colour=False).format(record)
+        assert "token=[REDACTED]" in line
+        assert "secret-token" not in line
 
 
 class TestConfigureLogging:

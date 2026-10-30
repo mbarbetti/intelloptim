@@ -43,6 +43,7 @@ that this client and the study disagree on its configuration.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from urllib.parse import quote
 
 from intelloptim._internal.logging import get_logger
 from intelloptim._internal.schemas import (
@@ -63,6 +64,11 @@ if TYPE_CHECKING:
 
 
 _log = get_logger(__name__)
+
+
+def _path_segment(value: str) -> str:
+    """Encode an opaque identifier for use as exactly one URL path segment."""
+    return quote(value, safe="")
 
 
 class StudyHandle:
@@ -149,7 +155,9 @@ class StudyHandle:
         body = AskRequest(
             config_digest=self._config_digest, worker_id=worker_id
         ).model_dump(mode="json")
-        response = self._client._post_json(f"/studies/{self._study_id}/ask", body)
+        response = self._client._post_json(
+            f"/studies/{_path_segment(self._study_id)}/ask", body
+        )
         payload = AskResponse.model_validate(response.json())
         trial = Trial(
             trial_id=payload.trial_id,
@@ -196,7 +204,9 @@ class StudyHandle:
             state=state,
         ).model_dump(mode="json")
         self._client._post_json(
-            f"/studies/{self._study_id}/trials/{trial.trial_id}/tell", body
+            f"/studies/{_path_segment(self._study_id)}/trials/"
+            f"{_path_segment(trial.trial_id)}/tell",
+            body,
         )
 
     def _should_prune(self, trial: Trial, values: Dict[int, float]) -> bool:
@@ -208,7 +218,9 @@ class StudyHandle:
             config_digest=self._config_digest, intermediate_values=values
         ).model_dump(mode="json")
         response = self._client._post_json(
-            f"/studies/{self._study_id}/trials/{trial.trial_id}/should_prune", body
+            f"/studies/{_path_segment(self._study_id)}/trials/"
+            f"{_path_segment(trial.trial_id)}/should_prune",
+            body,
         )
         return ShouldPruneResponse.model_validate(response.json()).should_prune
 
@@ -248,7 +260,9 @@ class StudyHandle:
             params=params,
             value=value,
         ).model_dump(mode="json")
-        response = self._client._post_json(f"/studies/{self._study_id}/enqueue", body)
+        response = self._client._post_json(
+            f"/studies/{_path_segment(self._study_id)}/enqueue", body
+        )
         payload = EnqueueResponse.model_validate(response.json())
         return Trial(
             trial_id=payload.trial_id,
@@ -267,7 +281,7 @@ class StudyHandle:
         Raises:
             StudyNotFoundError: If the server has no such study.
         """
-        self._client._post_json(f"/studies/{self._study_id}/stop", {})
+        self._client._post_json(f"/studies/{_path_segment(self._study_id)}/stop", {})
 
     def optimize(
         self,
@@ -311,7 +325,14 @@ class StudyHandle:
         Raises:
             InsufficientQuotaError: If *n_trials* exceeds the remaining call
                 budget. No request is made in this case.
+            TypeError: If *n_trials* is not an integer.
+            ValueError: If *n_trials* is negative.
         """
+        if isinstance(n_trials, bool) or not isinstance(n_trials, int):
+            raise TypeError("n_trials must be an int")
+        if n_trials < 0:
+            raise ValueError("n_trials must be non-negative")
+
         who = self._client._who_am_i
         if who is not None:
             remaining = (
@@ -373,7 +394,9 @@ class StudyHandle:
             Optional[Trial]: The best trial, with its ``value`` set, or ``None``
             if no trial has completed yet.
         """
-        response = self._client._get(f"/studies/{self._study_id}/best_trial")
+        response = self._client._get(
+            f"/studies/{_path_segment(self._study_id)}/best_trial"
+        )
         payload = response.json()
         if not payload.get("available", False):
             return None
