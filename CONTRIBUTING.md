@@ -46,10 +46,9 @@ you opt in explicitly, and they never run in CI.
 
 ## Documentation publishing
 
-Documentation is built for every pull request by CI. After a change lands on
-`main`, the `Publish documentation` workflow deploys the strict Sphinx build to
-GitHub Pages. A maintainer can also trigger that workflow manually from the
-Actions tab.
+Documentation is built for every pull request by CI. Read the Docs publishes
+the strict Sphinx build from `main` and provides versioned documentation for
+release tags.
 
 ## Code conventions
 
