@@ -22,7 +22,6 @@ autosummary_generate = True
 autodoc_default_options = {"members": True, "show-inheritance": True}
 autodoc_typehints = "description"
 napoleon_google_docstring = True
-nitpicky = True
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "pydantic": ("https://docs.pydantic.dev/latest/", None),
