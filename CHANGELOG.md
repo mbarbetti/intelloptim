@@ -23,6 +23,7 @@ version is below 1.0, minor releases may contain breaking changes.
 
 - Reject unsafe local token files, including symlinks and files accessible by
   group or other users, and redact sensitive fields from structured logging.
+- Add CodeQL static analysis and PR dependency review.
 
 ## [0.1.0] - 2026-10-30
 
