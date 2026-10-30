@@ -38,10 +38,18 @@ black --check src tests
 mypy src/intelloptim
 nox                                # all of the above, in isolated environments
 nox -s tests-3.14                  # the tests on one Python version
+nox -s docs                         # strict Sphinx documentation build
 ```
 
 Tests marked `hardware` talk to a real quantum device. They are skipped unless
 you opt in explicitly, and they never run in CI.
+
+## Documentation publishing
+
+Documentation is built for every pull request by CI. After a change lands on
+`main`, the `Publish documentation` workflow deploys the strict Sphinx build to
+GitHub Pages. A maintainer can also trigger that workflow manually from the
+Actions tab.
 
 ## Code conventions
 

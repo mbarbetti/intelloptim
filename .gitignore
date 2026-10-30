@@ -58,3 +58,6 @@ frontend/coverage/
 # Logs
 *.log
 logs/
+
+# Documentation builds
+docs/_build/

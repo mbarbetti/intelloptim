@@ -7,6 +7,7 @@ overrides the backend with ``--default-venv-backend virtualenv``.
     nox -s tests           tests on every supported Python
     nox -s tests-3.14      tests on one Python
     nox -s build           build the sdist and wheel, check them, smoke-install
+    nox -s docs            build the Sphinx documentation with warnings as errors
 """
 
 from __future__ import annotations
@@ -77,3 +78,18 @@ def build(session: nox.Session) -> None:
         "import intelloptim; print('intelloptim', intelloptim.__version__)",
     )
     session.run("intelloptim-worker", "--help")
+
+
+@nox.session(python=DEFAULT_PYTHON)
+def docs(session: nox.Session) -> None:
+    """Build the public API documentation with strict warning handling."""
+    session.install("-e", ".[docs]")
+    session.run(
+        "sphinx-build",
+        "-W",
+        "--keep-going",
+        "-b",
+        "html",
+        "docs/source",
+        "docs/_build/html",
+    )
