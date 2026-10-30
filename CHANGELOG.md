@@ -7,6 +7,17 @@ version is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Fixed
+
+- Encode opaque study and trial identifiers as URL path segments, close the
+  evaluator HTTP client, avoid collisions when importing same-named objective
+  files, and reject invalid `optimize(n_trials=...)` values.
+
+### Security
+
+- Reject unsafe local token files, including symlinks and files accessible by
+  group or other users, and redact sensitive fields from structured logging.
+
 ## [0.1.0] - 2026-10-30
 
 First public release.
