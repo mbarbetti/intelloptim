@@ -14,14 +14,12 @@ at client creation rather than on the first request.
 
 from __future__ import annotations
 
+import errno
 import os
 import stat
 from typing import Optional
 
-from intelloptim._internal.logging import get_logger
-from intelloptim.client.errors import MissingTokenError
-
-_log = get_logger(__name__)
+from intelloptim.client.errors import InsecureTokenFileError, MissingTokenError
 
 
 def resolve_token(explicit: Optional[str] = None) -> str:
@@ -30,8 +28,8 @@ def resolve_token(explicit: Optional[str] = None) -> str:
     The order is the explicit argument, the ``INTELLOPTIM_TOKEN`` environment
     variable, then the file ``~/.config/intelloptim/token``. Empty and
     whitespace-only values fall through to the next source, and the returned
-    token has no surrounding whitespace. On POSIX systems, a warning is logged
-    when the token file can be read or written by other users.
+    token has no surrounding whitespace. On POSIX systems, an unsafe token
+    file is rejected rather than read.
 
     Args:
         explicit (Optional[str]): Token passed via ``Client(..., token=...)``.
@@ -43,6 +41,8 @@ def resolve_token(explicit: Optional[str] = None) -> str:
 
     Raises:
         MissingTokenError: If no source provides a token.
+        InsecureTokenFileError: If the token file is not a private regular file
+            owned by the current user.
         OSError: If the token file exists but cannot be read.
     """
     for candidate in (explicit, os.environ.get("INTELLOPTIM_TOKEN")):
@@ -50,12 +50,12 @@ def resolve_token(explicit: Optional[str] = None) -> str:
             return candidate.strip()
 
     path = os.path.join(os.path.expanduser("~"), ".config", "intelloptim", "token")
-    if os.path.exists(path):
-        _warn_if_shared(path)
-        with open(path, "r", encoding="utf-8") as f:
-            on_disk = f.read().strip()
-        if on_disk:
-            return on_disk
+    try:
+        on_disk = _read_token_file(path)
+    except FileNotFoundError:
+        on_disk = ""
+    if on_disk:
+        return on_disk
 
     raise MissingTokenError(
         "No API token found. Pass token=... to Client(...), set "
@@ -64,24 +64,59 @@ def resolve_token(explicit: Optional[str] = None) -> str:
     )
 
 
-def _warn_if_shared(path: str) -> None:
-    """Log a warning if the token file at *path* is accessible to other users.
+def _read_token_file(path: str) -> str:
+    """Read a token file after verifying its ownership and permissions.
 
-    Only meaningful on POSIX, where a token file should be readable by its
-    owner alone (mode ``600``), like an SSH key. The token itself is never
-    logged. Failures to inspect the file are ignored: reading it will raise
-    the relevant error.
+    On POSIX, open the file descriptor without following symlinks and inspect
+    that descriptor to avoid a time-of-check/time-of-use race. Other platforms
+    retain normal file semantics because ownership and mode bits are not
+    portable there.
     """
     if os.name != "posix":
-        return
+        with open(path, "r", encoding="utf-8") as token_file:
+            return token_file.read().strip()
+
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        mode = stat.S_IMODE(os.stat(path).st_mode)
-    except OSError:
-        return
+        fd = os.open(path, flags)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise InsecureTokenFileError("token file must not be a symlink") from exc
+        raise
+
+    try:
+        file_stat = os.fstat(fd)
+        _validate_token_file(path, file_stat)
+        with os.fdopen(fd, "r", encoding="utf-8") as token_file:
+            fd = -1
+            return token_file.read().strip()
+    finally:
+        if fd != -1:
+            os.close(fd)
+
+
+def _validate_token_file(path: str, file_stat: os.stat_result) -> None:
+    """Reject a token file that is unsafe to read on a shared POSIX host."""
+    if not stat.S_ISREG(file_stat.st_mode):
+        raise InsecureTokenFileError("token file must be a regular file")
+    if file_stat.st_uid != os.getuid():
+        raise InsecureTokenFileError("token file must be owned by the current user")
+    mode = stat.S_IMODE(file_stat.st_mode)
     if mode & (stat.S_IRWXG | stat.S_IRWXO):
-        _log.warning(
-            f"token file is accessible by other users; restrict it with "
-            f"'chmod 600 {path}'",
+        raise InsecureTokenFileError(
+            "token file must not grant permissions to group or other users"
+        )
+
+    directory_stat = os.stat(os.path.dirname(path))
+    directory_mode = stat.S_IMODE(directory_stat.st_mode)
+    if directory_stat.st_uid != os.getuid() or directory_mode & (
+        stat.S_IWGRP | stat.S_IWOTH
+    ):
+        raise InsecureTokenFileError(
+            "token directory must be owned by the current user and not writable "
+            "by group or other users"
         )
 
 

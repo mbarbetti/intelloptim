@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 import httpx
+import pytest
 
 from intelloptim.client.api import Client
 from intelloptim.client.study import StudyHandle
@@ -45,3 +46,13 @@ def test_worker_id_is_sent_with_every_ask(token: str) -> None:
 
 def test_worker_id_defaults_to_none(token: str) -> None:
     assert [a["worker_id"] for a in _optimize(token, None)] == [None, None]
+
+
+@pytest.mark.parametrize("n_trials", [-1, True, 1.5])
+def test_optimize_rejects_invalid_trial_count(token: str, n_trials: Any) -> None:
+    with (
+        httpx.Client(base_url="http://m") as http,
+        Client(url="http://m", token=token, http_client=http) as client,
+        pytest.raises((TypeError, ValueError)),
+    ):
+        _handle(client).optimize(lambda trial: 1.0, n_trials=n_trials)

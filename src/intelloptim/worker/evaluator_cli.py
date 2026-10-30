@@ -175,12 +175,14 @@ def run_evaluator(
 
     from intelloptim.client.api import Client
 
-    http_client = httpx.Client(
-        base_url=server,
-        headers={"X-Worker-Id": effective_wid, "X-Site": effective_site},
-        timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0),
-    )
-    with Client(url=server, token=resolved_token, http_client=http_client) as client:
+    with (
+        httpx.Client(
+            base_url=server,
+            headers={"X-Worker-Id": effective_wid, "X-Site": effective_site},
+            timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0),
+        ) as http_client,
+        Client(url=server, token=resolved_token, http_client=http_client) as client,
+    ):
         study = client.create_study(
             study_name=spec.study_name,
             direction=spec.direction,
