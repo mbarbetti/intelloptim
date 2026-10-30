@@ -106,6 +106,7 @@ intelloptim-worker = "intelloptim.worker.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/mbarbetti/intelloptim"
+Documentation = "https://intelloptim.readthedocs.io"
 Repository = "https://github.com/mbarbetti/intelloptim"
 Issues = "https://github.com/mbarbetti/intelloptim/issues"
 Changelog = "https://github.com/mbarbetti/intelloptim/blob/main/CHANGELOG.md"

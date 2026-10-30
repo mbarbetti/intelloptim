@@ -13,6 +13,7 @@
 [![PyPI](https://img.shields.io/pypi/v/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![Python](https://img.shields.io/pypi/pyversions/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![License](https://img.shields.io/pypi/l/intelloptim.svg)](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE)
+[![Documentation](https://readthedocs.org/projects/intelloptim/badge/?version=latest)](https://intelloptim.readthedocs.io)
 
 Distributed black-box optimization built on [Optuna](https://optuna.org/)'s
 ask/tell API. Evaluators on any infrastructure (HPC, cloud, on-prem)
