@@ -84,6 +84,7 @@ samplers = [
 # Tests, linting and type checking.
 dev = [
     "intelloptim[quantum]",
+    "intelloptim[docs]",
     "pytest>=8.0",
     "pytest-cov>=4.1",
     "respx>=0.21",
@@ -94,6 +95,10 @@ dev = [
     "nox>=2024.10",
     "build>=1.2",
     "twine>=5.1",
+]
+docs = [
+    "sphinx>=8.2,<9",
+    "furo>=2024.8.6",
 ]
 
 [project.scripts]

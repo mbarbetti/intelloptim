@@ -7,6 +7,12 @@ version is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- Sphinx and Read the Docs configuration for a public guide and API reference,
+  built with warnings treated as errors, plus an automated GitHub Pages
+  publishing workflow for `main`.
+
 ### Fixed
 
 - Encode opaque study and trial identifiers as URL path segments, close the
