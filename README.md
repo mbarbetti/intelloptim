@@ -10,6 +10,7 @@
 # intelloptim
 
 [![CI](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml/badge.svg)](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mbarbetti/intelloptim/graph/badge.svg)](https://codecov.io/gh/mbarbetti/intelloptim)
 [![PyPI](https://img.shields.io/pypi/v/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![Python](https://img.shields.io/pypi/pyversions/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![License](https://img.shields.io/pypi/l/intelloptim.svg)](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE)

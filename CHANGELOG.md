@@ -12,6 +12,8 @@ version is below 1.0, minor releases may contain breaking changes.
 - Sphinx and Read the Docs configuration for a public guide and API reference,
   built with warnings treated as errors, a package metadata documentation URL,
   and a README build-status badge.
+- Test coverage: the test sessions measure it (`coverage.xml`), CI uploads it to
+  Codecov, and the README shows the coverage badge.
 
 ### Fixed
 

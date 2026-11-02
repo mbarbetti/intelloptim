@@ -37,7 +37,7 @@ ruff check src tests
 black --check src tests
 mypy src/intelloptim
 nox                                # all of the above, in isolated environments
-nox -s tests-3.14                  # the tests on one Python version
+nox -s tests-3.14                  # the tests on one Python version, with coverage
 nox -s docs                         # strict Sphinx documentation build
 ```
 
