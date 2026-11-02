@@ -1,7 +1,7 @@
 """Handle to a study on the server.
 
 A :class:`StudyHandle` wraps the client-server REST surface of one study. It is
-returned by :meth:`~intelloptim.client.api.Client.create_study`; users do not
+returned by :meth:`~intelloptim.client.Client.create_study`; users do not
 instantiate it directly. The study, including its search space, is already
 defined by then: the handle only asks the server for trials and reports their
 results.

@@ -7,7 +7,7 @@ A :class:`Client` is a thin wrapper around :class:`httpx.Client` that adds:
 - the translation of server error responses into the typed hierarchy of
   :mod:`intelloptim.client.errors`;
 - :meth:`Client.create_study`, which declares a study and returns the
-  :class:`~intelloptim.client.study.StudyHandle` used to ask for trials and
+  :class:`~intelloptim.client.StudyHandle` used to ask for trials and
   report their results.
 
 Typical usage::
@@ -159,7 +159,7 @@ class Client:
 
         The first call also fetches the caller's quota snapshot, which is
         cached on the client and used for the pre-flight checks of this method
-        and of :meth:`~intelloptim.client.study.StudyHandle.optimize`. A
+        and of :meth:`~intelloptim.client.StudyHandle.optimize`. A
         warning is logged if the call budget is limited.
 
         Args:

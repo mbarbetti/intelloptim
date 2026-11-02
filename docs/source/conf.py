@@ -19,8 +19,9 @@ extensions = [
     "sphinx.ext.napoleon",
 ]
 autosummary_generate = True
-autodoc_default_options = {"members": True, "show-inheritance": True}
+autodoc_default_options = {"members": True}
 autodoc_typehints = "description"
+autodoc_typehints_description_target = "documented"
 napoleon_google_docstring = True
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
