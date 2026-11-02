@@ -46,7 +46,10 @@ def typecheck(session: nox.Session) -> None:
 
 @nox.session(python=PYTHONS)
 def tests(session: nox.Session) -> None:
-    """Unit and integration tests; tests that need a real device never run."""
+    """Unit and integration tests with coverage; real-device tests never run.
+
+    The coverage report is also written to ``coverage.xml``, which CI uploads.
+    """
     session.install("-e", ".[dev]")
     session.run(
         "pytest",
@@ -54,6 +57,9 @@ def tests(session: nox.Session) -> None:
         "-q",
         "-m",
         "not hardware",
+        "--cov",
+        "--cov-report=term",
+        "--cov-report=xml",
         *session.posargs,
         env={
             "INTELLOPTIM_ALLOW_QUANTUM_HARDWARE": "",

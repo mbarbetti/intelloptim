@@ -17,6 +17,8 @@ version is below 1.0, minor releases may contain breaking changes.
   authentication, running on a SLURM cluster and extending with plugins. The API
   reference now lists only what a user touches and separates the Optuna,
   built-in and quantum samplers.
+ - Test coverage: the test sessions measure it (`coverage.xml`), CI uploads it to
+  Codecov, and the README shows the coverage badge.
 
 ### Fixed
 
