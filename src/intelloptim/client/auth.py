@@ -3,7 +3,7 @@
 The client authenticates with a bearer token, which :func:`resolve_token` looks
 for in three places. The first one that yields a non-empty value wins:
 
-1. The ``token=`` argument passed to :class:`~intelloptim.client.api.Client`.
+1. The ``token=`` argument passed to :class:`~intelloptim.client.Client`.
 2. The ``INTELLOPTIM_TOKEN`` environment variable.
 3. The contents of ``~/.config/intelloptim/token``, if the file exists.
 

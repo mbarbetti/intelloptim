@@ -42,7 +42,7 @@ class IntelloptimError(Exception):
 class TrialPruned(Exception):
     """Raised by an objective to end a trial that the pruner has stopped.
 
-    :meth:`~intelloptim.client.study.StudyHandle.optimize` catches it, reports
+    :meth:`~intelloptim.client.StudyHandle.optimize` catches it, reports
     the trial as ``PRUNED`` with the last intermediate value reported, and moves
     on to the next trial. It is not logged as a failure::
 
@@ -81,7 +81,7 @@ class MissingTokenError(IntelloptimError):
     The client looks for a token in the ``token`` argument, the
     ``INTELLOPTIM_TOKEN`` environment variable and the file
     ``~/.config/intelloptim/token``, in that order, and fails when creating
-    the :class:`~intelloptim.client.api.Client` if none of them provides one.
+    the :class:`~intelloptim.client.Client` if none of them provides one.
     """
 
 
@@ -148,7 +148,7 @@ class InsufficientQuotaError(IntelloptimError):
     """Raised before any trial runs when ``n_trials`` exceeds the call budget.
 
     This is a client-side pre-flight check, made by
-    :meth:`~intelloptim.client.study.StudyHandle.optimize` against the quota
+    :meth:`~intelloptim.client.StudyHandle.optimize` against the quota
     snapshot fetched when the study was created. It prevents obvious
     over-budget runs without consuming any quota. The server enforces the
     limit independently on every ``ask`` and ``tell``.
@@ -158,7 +158,7 @@ class InsufficientQuotaError(IntelloptimError):
 class StudyLimitExceededError(IntelloptimError):
     """Raised before contacting the server when the study cap is reached.
 
-    :meth:`~intelloptim.client.api.Client.create_study` makes this check
+    :meth:`~intelloptim.client.Client.create_study` makes this check
     against the quota snapshot it fetches on first use. Delete an existing
     study to free a slot, or contact your admin to upgrade your role. The
     server enforces the same limit independently.

@@ -12,6 +12,11 @@ version is below 1.0, minor releases may contain breaking changes.
 - Sphinx and Read the Docs configuration for a public guide and API reference,
   built with warnings treated as errors, a package metadata documentation URL,
   and a README build-status badge.
+- Documentation guides reorganised and expanded: the origin of the project,
+  installation, the Optuna ask/tell model with enqueue, sampling and pruning,
+  authentication, running on a SLURM cluster and extending with plugins. The API
+  reference now lists only what a user touches and separates the Optuna,
+  built-in and quantum samplers.
 
 ### Fixed
 
