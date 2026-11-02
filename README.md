@@ -9,11 +9,11 @@
 
 # intelloptim
 
-[![CI](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml/badge.svg)](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/mbarbetti/intelloptim/graph/badge.svg)](https://codecov.io/gh/mbarbetti/intelloptim)
 [![PyPI](https://img.shields.io/pypi/v/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![Python](https://img.shields.io/pypi/pyversions/intelloptim.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/pypi/l/intelloptim.svg)](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE)
+[![CI](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml/badge.svg)](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/mbarbetti/intelloptim/graph/badge.svg)](https://codecov.io/gh/mbarbetti/intelloptim)
 [![Documentation](https://readthedocs.org/projects/intelloptim/badge/?version=latest)](https://intelloptim.readthedocs.io)
 
 Distributed black-box optimization built on [Optuna](https://optuna.org/)'s

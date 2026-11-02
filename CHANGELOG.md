@@ -7,6 +7,8 @@ version is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-02
+
 ### Added
 
 - Sphinx and Read the Docs configuration for a public guide and API reference,
@@ -17,7 +19,7 @@ version is below 1.0, minor releases may contain breaking changes.
   authentication, running on a SLURM cluster and extending with plugins. The API
   reference now lists only what a user touches and separates the Optuna,
   built-in and quantum samplers.
- - Test coverage: the test sessions measure it (`coverage.xml`), CI uploads it to
+- Test coverage: the test sessions measure it (`coverage.xml`), CI uploads it to
   Codecov, and the README shows the coverage badge.
 
 ### Fixed
@@ -57,5 +59,6 @@ First public release.
   worker_id=...)`), derived from the SLURM environment.
 - Optional extras: `gp`, `qmc`, `quantum`, `quantum-ibm`, `samplers`.
 
-[Unreleased]: https://github.com/mbarbetti/intelloptim/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/mbarbetti/intelloptim/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/mbarbetti/intelloptim/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/mbarbetti/intelloptim/releases/tag/v0.1.0
