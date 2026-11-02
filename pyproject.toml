@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "intelloptim"
 dynamic = ["version"]
-description = "Distributed black-box optimization on Optuna's ask/tell API, with classical and quantum samplers."
+description = "Server-orchestrated, data-driven optimization with classical and quantum samplers."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -16,11 +16,13 @@ authors = [
 keywords = [
     "optimization",
     "black-box",
+    "data-driven",
     "hyperparameter",
     "optuna",
     "bayesian",
     "quantum",
     "distributed",
+    "orchestration",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -105,7 +107,7 @@ docs = [
 intelloptim-worker = "intelloptim.worker.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/mbarbetti/intelloptim"
+# Homepage = "https://github.com/mbarbetti/intelloptim"
 Documentation = "https://intelloptim.readthedocs.io"
 Repository = "https://github.com/mbarbetti/intelloptim"
 Issues = "https://github.com/mbarbetti/intelloptim/issues"

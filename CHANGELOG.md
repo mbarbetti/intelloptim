@@ -7,6 +7,11 @@ version is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- Describe intelloptim consistently as server-orchestrated, data-driven
+  optimization with classical and quantum samplers.
+
 ## [0.1.1] - 2026-11-02
 
 ### Added
