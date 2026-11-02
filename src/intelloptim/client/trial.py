@@ -28,7 +28,7 @@ of every other trial::
 Coming from Optuna? Here the search space is defined once, when the study is
 created, and not dynamically inside the objective as Optuna's ``suggest_*``
 methods allow. Declare the parameters in
-:meth:`~intelloptim.client.api.Client.create_study` and read them back with the
+:meth:`~intelloptim.client.Client.create_study` and read them back with the
 ``sampled_*`` accessors.
 """
 
@@ -46,7 +46,7 @@ class Trial:
 
     Args:
         trial_id (str): Server-assigned opaque identifier; pass it back
-            unchanged in :meth:`~intelloptim.client.study.StudyHandle.tell`.
+            unchanged in :meth:`~intelloptim.client.StudyHandle.tell`.
         number (int): Zero-based ordinal within the study.
         params (Dict[str, Any]): Mapping of parameter name to the value the
             server sampled for it.
@@ -182,7 +182,7 @@ class Trial:
 
         Raises:
             RuntimeError: If the trial did not come from
-                :meth:`~intelloptim.client.study.StudyHandle.ask`.
+                :meth:`~intelloptim.client.StudyHandle.ask`.
             TrialNotFoundError: If the server does not know the trial, or it
                 is no longer running.
             ConfigDigestMismatchError: If the study configuration on the
