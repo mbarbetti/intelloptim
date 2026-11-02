@@ -9,23 +9,23 @@
 
 # intelloptim
 
-[![PyPI](https://img.shields.io/pypi/v/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![Python](https://img.shields.io/pypi/pyversions/intelloptim.svg)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/intelloptim.svg)](https://pypi.org/project/intelloptim/)
 [![License](https://img.shields.io/pypi/l/intelloptim.svg)](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE)
 [![CI](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml/badge.svg)](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/mbarbetti/intelloptim/graph/badge.svg)](https://codecov.io/gh/mbarbetti/intelloptim)
-[![Documentation](https://readthedocs.org/projects/intelloptim/badge/?version=latest)](https://intelloptim.readthedocs.io)
+[![Documentation](https://img.shields.io/readthedocs/intelloptim?logo=read-the-docs)](https://intelloptim.readthedocs.io)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23880962.svg)](https://doi.org/10.5281/zenodo.23880962)
 
-Distributed black-box optimization built on [Optuna](https://optuna.org/)'s
-ask/tell API. Evaluators on any infrastructure (HPC, cloud, on-prem)
-collaborate on a single study through a coordinating server, and the sampler
-layer treats classical and quantum samplers uniformly.
+Server-orchestrated, data-driven optimization with classical and quantum
+samplers. Evaluators on any infrastructure (HPC, cloud, on-prem) collaborate on
+a single study through a coordinating server.
 
 This package is the client SDK and the sampler layer. It talks to an
 intelloptim server over HTTP; the server itself is not part of this package.
 Full documentation: **[intelloptim.readthedocs.io](https://intelloptim.readthedocs.io)**.
 
-## Where it comes from
+## 🌱 Where it comes from
 
 `intelloptim` is the evolution of **Hopaas**, *Hyperparameter OPtimization As A
 Service* (Barbetti & Anderlini, [arXiv:2301.05522](https://arxiv.org/abs/2301.05522)).
@@ -35,9 +35,9 @@ network connection to a server that holds the study. It tuned the generative
 models behind the LHCb ultra-fast simulation, with studies fed by more than
 twenty concurrent nodes.
 
-`intelloptim` keeps that philosophy and generalizes it to any
-small-to-moderate-dimensional black-box problem (system calibration, model
-tuning, ...), with more robustness and security:
+`intelloptim` keeps that philosophy and generalizes it to small-to-moderate-
+dimensional optimization problems, such as system calibration and model tuning,
+with more robustness and security:
 
 - bearer-token authentication (the token never appears in a URL or in a study's
   identity) and a client that refuses unsafe token files;
@@ -48,7 +48,7 @@ tuning, ...), with more robustness and security:
   with background rebuilds for the ones that refit;
 - `enqueue`, `stop`, call quotas and a worker for SLURM.
 
-## Installation
+## 📦 Installation
 
 ```bash
 pip install intelloptim
@@ -67,11 +67,10 @@ Samplers with heavier requirements are optional extras:
 Python 3.11 or newer is required. You also need the URL of a server and an API
 token.
 
-## An Optuna wrapper, with a server
+## 🧭 Server-orchestrated optimization
 
-If you know Optuna's ask/tell API, you know the model: a study, trials, a
-sampler and a pruner, with the study living on a server so that many machines
-can contribute to it.
+``intelloptim`` keeps Optuna's study, trial, sampler and pruner concepts, while
+the server holds the shared study so that many machines can contribute to it.
 
 ```python
 import intelloptim as intopt
@@ -126,7 +125,7 @@ values by name (`sampled_float`, `sampled_int`, `sampled_categorical`).
   Gaussian `OWG`) and **quantum** policy samplers, simulated or on hardware.
   [More](https://intelloptim.readthedocs.io/en/latest/guides/sampling.html)
 
-## Authentication
+## 🔐 Authentication
 
 Every request carries an API token. The client takes it from the `token=`
 argument, then from the `INTELLOPTIM_TOKEN` environment variable, then from
@@ -136,7 +135,7 @@ never put it in code, command lines, study specifications or logs, and use
 HTTPS for any non-local server.
 [More](https://intelloptim.readthedocs.io/en/latest/guides/authentication.html)
 
-## Running on a cluster
+## 🖥️ Running on a cluster
 
 `intelloptim-worker` runs an objective on a batch system without a driver
 script. Each task of a SLURM array job imports the objective, joins the study
@@ -152,7 +151,7 @@ intelloptim-worker evaluator \
 [More](https://intelloptim.readthedocs.io/en/latest/guides/cluster.html), with a
 complete array-job script.
 
-## Status
+## 🚧 Status
 
 Early development (alpha): the API may still change between minor versions.
 See [CHANGELOG.md](https://github.com/mbarbetti/intelloptim/blob/main/CHANGELOG.md)
@@ -160,11 +159,11 @@ for what changed in each release and
 [CONTRIBUTING.md](https://github.com/mbarbetti/intelloptim/blob/main/CONTRIBUTING.md)
 to get involved.
 
-## License
+## 📄 License
 
 Apache-2.0, see [LICENSE](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE).
 
-## Citation
+## 📚 Citation
 
 If you use `intelloptim` in academic work, please cite the Hopaas paper:
 M. Barbetti and L. Anderlini, *Hyperparameter Optimization as a Service on INFN

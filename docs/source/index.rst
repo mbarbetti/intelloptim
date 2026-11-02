@@ -1,10 +1,11 @@
 intelloptim
 ===========
 
-**Distributed black-box optimization**: many evaluators, on any infrastructure,
-collaborate on one study through a coordinating server. ``intelloptim`` is the
-Python SDK and the sampler layer; it wraps `Optuna <https://optuna.org/>`_'s
-ask/tell model and adds what a shared, multi-site service needs.
+**Server-orchestrated, data-driven optimization with classical and quantum
+samplers.** Many evaluators, on any infrastructure, collaborate on one study
+through a coordinating server. ``intelloptim`` is the Python SDK and sampler
+layer for that service; it builds on `Optuna <https://optuna.org/>`_ where its
+study and trial model is useful.
 
 .. code-block:: python
 
@@ -51,9 +52,8 @@ What intelloptim adds
 ---------------------
 
 ``intelloptim`` keeps that philosophy and generalizes it from hyperparameter
-tuning to any small-to-moderate-dimensional black-box optimization problem, such
-as the calibration of a system or the tuning of a model. It is also built to be
-more robust and more secure.
+tuning to small-to-moderate-dimensional optimization problems, such as system
+calibration and model tuning. It is also built to be more robust and secure.
 
 .. list-table::
    :header-rows: 1
@@ -64,7 +64,7 @@ more robust and more secure.
      - ``intelloptim``
    * - Scope
      - Hyperparameter optimization of machine-learning models.
-     - Any black-box objective: simulations, calibrations, models.
+     - Data-driven optimization for simulations, calibrations and models.
    * - Token
      - The API token is part of the request path.
      - The token is sent as a bearer header, never in the URL, and it is never

@@ -1,13 +1,13 @@
-Optuna, with a server
-=====================
+Optuna, orchestrated by a server
+================================
 
-``intelloptim`` is Optuna's *ask/tell* model put behind a server. If you know
-Optuna, the vocabulary is the same: a **study** is one optimization, a **trial**
-is one evaluation of the objective, a **sampler** proposes the next point and a
-**pruner** stops trials that are not going anywhere. What changes is where
-these live. The study, its history and the samplers run on the server, and
-every evaluator, wherever it runs, is a client that asks for a trial, evaluates
-it and tells the result.
+``intelloptim`` orchestrates Optuna-compatible optimization through a server.
+If you know Optuna, the vocabulary is the same: a **study** is one optimization,
+a **trial** is one evaluation of the objective, a **sampler** proposes the next
+point and a **pruner** stops trials that are not going anywhere. What changes is
+where these live. The study, its history and the samplers run on the server, and
+every evaluator, wherever it runs, obtains a trial, evaluates it and reports the
+result.
 
 .. code-block:: text
 
