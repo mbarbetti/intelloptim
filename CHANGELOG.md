@@ -7,10 +7,25 @@ version is below 1.0, minor releases may contain breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- Audit events for study sharing: `study.share.added`, `study.share.removed`,
+  `study.share.group` and `study.share.refused`. `study.access_denied` now also
+  reports the actions `results`, `contribute` and `manage`.
+
 ### Changed
 
 - Describe intelloptim consistently as server-orchestrated, data-driven
   optimization with classical and quantum samplers.
+
+### Fixed
+
+- Map rate-limited ``should_prune`` responses to ``PruneRateLimitError`` and
+  surface the server's ``Retry-After`` delay to SDK callers.
+- Audit records for token events (`token.issued`, `token.revoked`,
+  `token.deleted`) lost their token prefix and name to log redaction, because
+  the field names contained `token`. The fields are now `key_prefix` and
+  `key_name`.
 
 ## [0.1.1] - 2026-11-02
 

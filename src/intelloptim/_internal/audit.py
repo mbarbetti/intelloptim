@@ -1,7 +1,7 @@
 """Audit events: a small, stable record of security-relevant actions.
 
 Each function below records one kind of event (a login, a token change, a study
-stopped or rebuilt) as a structured log record on the ``intelloptim.audit``
+stopped, rebuilt or shared) as a structured log record on the ``intelloptim.audit``
 logger. Event and field names do not change between releases, so operators can
 filter and alert on them.
 
@@ -18,7 +18,8 @@ Every record carries:
 Records are written to the main log stream, marked with ``event_category=audit``,
 unless ``INTELLOPTIM_AUDIT_FILE`` sends them to a file of their own (see
 :mod:`intelloptim._internal.logging`). Tokens are identified by their prefix
-only, never in full.
+only, never in full, in the fields ``key_prefix`` and ``key_name``: the logger
+redacts every field whose name contains ``token``.
 """
 
 from __future__ import annotations
@@ -147,7 +148,7 @@ def token_issued(*, user_id: str, token_prefix: str, name: str) -> None:
         "token.issued",
         outcome="success",
         actor=user_id,
-        extra={"token_prefix": token_prefix, "token_name": name},
+        extra={"key_prefix": token_prefix, "key_name": name},
     )
 
 
@@ -163,7 +164,7 @@ def token_revoked(*, user_id: str, token_prefix: str) -> None:
         "token.revoked",
         outcome="success",
         actor=user_id,
-        extra={"token_prefix": token_prefix},
+        extra={"key_prefix": token_prefix},
     )
 
 
@@ -179,7 +180,7 @@ def token_deleted(*, user_id: str, token_prefix: str) -> None:
         "token.deleted",
         outcome="success",
         actor=user_id,
-        extra={"token_prefix": token_prefix},
+        extra={"key_prefix": token_prefix},
     )
 
 
@@ -285,14 +286,85 @@ def study_access_denied(*, study_id: str, user_id: str, action: str) -> None:
     Args:
         study_id (str): Id of the study that was requested.
         user_id (str): Id of the user who asked; becomes the actor.
-        action (str): What was attempted: ``"read"``, ``"stop"``, ``"delete"``
-            or ``"rebuild"``.
+        action (str): What was attempted: ``"read"``, ``"results"``,
+            ``"contribute"``, ``"manage"``, ``"stop"``, ``"delete"`` or
+            ``"rebuild"``.
     """
     emit(
         "study.access_denied",
         outcome="failure",
         actor=user_id,
         extra={"study_id": study_id, "action": action},
+        level=logging.WARNING,
+    )
+
+
+def study_share_added(*, study_id: str, user_id: str, grantee: str) -> None:
+    """Record read-only access granted to an address (event ``study.share.added``).
+
+    Args:
+        study_id (str): Id of the study whose results were shared.
+        user_id (str): Id of the owner who shared it; becomes the actor.
+        grantee (str): Email address that gained access, stored in the record as
+            ``grantee``. It may not belong to any account yet.
+    """
+    emit(
+        "study.share.added",
+        outcome="success",
+        actor=user_id,
+        extra={"study_id": study_id, "grantee": grantee},
+    )
+
+
+def study_share_removed(*, study_id: str, user_id: str, grantee: str) -> None:
+    """Record read-only access withdrawn (event ``study.share.removed``).
+
+    Args:
+        study_id (str): Id of the study.
+        user_id (str): Id of the owner who revoked the access; becomes the actor.
+        grantee (str): Email address that lost access, stored as ``grantee``.
+    """
+    emit(
+        "study.share.removed",
+        outcome="success",
+        actor=user_id,
+        extra={"study_id": study_id, "grantee": grantee},
+    )
+
+
+def study_group_sharing_changed(*, study_id: str, user_id: str, enabled: bool) -> None:
+    """Record that a study was opened or closed to a group (event ``study.share.group``).
+
+    Args:
+        study_id (str): Id of the study.
+        user_id (str): Id of the owner who changed it; becomes the actor.
+        enabled (bool): ``True`` if the members of the study's group can now read
+            its results, ``False`` if that access was withdrawn.
+    """
+    emit(
+        "study.share.group",
+        outcome="success",
+        actor=user_id,
+        extra={"study_id": study_id, "enabled": enabled},
+    )
+
+
+def study_share_refused(*, study_id: str, user_id: str, reason: str) -> None:
+    """Record a sharing change that was refused (event ``study.share.refused``).
+
+    The record has level ``WARNING``.
+
+    Args:
+        study_id (str): Id of the study.
+        user_id (str): Id of the owner who tried; becomes the actor.
+        reason (str): Why it was refused, for example ``"limit-reached"``,
+            ``"invalid-address"``, ``"self"`` or ``"no-group"``.
+    """
+    emit(
+        "study.share.refused",
+        outcome="failure",
+        actor=user_id,
+        extra={"study_id": study_id, "reason": reason},
         level=logging.WARNING,
     )
 
@@ -338,8 +410,12 @@ __all__ = [
     "quota_exhausted",
     "study_access_denied",
     "study_created",
+    "study_group_sharing_changed",
     "study_rebuild_finished",
     "study_rebuild_started",
+    "study_share_added",
+    "study_share_refused",
+    "study_share_removed",
     "study_stopped",
     "token_authentication_failure",
     "token_deleted",
