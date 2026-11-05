@@ -7,4 +7,4 @@ coverage:
     # Whole-project coverage must not drop against the base commit.
     project:
       default:
-        target: auto
+        target: 90%
