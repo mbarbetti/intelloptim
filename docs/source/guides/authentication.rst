@@ -94,12 +94,15 @@ When authentication or limits fail
      - The server does not accept the token: it is wrong or no longer valid.
    * - :class:`~intelloptim.client.errors.IntelloptimAPIError` with
        ``status_code == 429``
-     - The call quota is exhausted on the server.
+     - The call quota is exhausted on the server. With a token that belongs to
+       a group, calls are charged to the group's budget (and to your share of
+       it), not to your personal quota.
    * - :class:`~intelloptim.client.errors.InsufficientQuotaError`
      - ``optimize`` found, before sending anything, that ``n_trials`` exceeds the
        calls you have left.
    * - :class:`~intelloptim.client.errors.StudyLimitExceededError`
-     - You have reached the cap on active studies.
+     - The server refused to create a new study because you have reached the cap
+       on active studies. Joining an existing study is always possible.
 
 How tokens are issued, rotated and revoked, and what quotas apply, is decided by
 whoever deploys the server. Ask them, or see the server's own documentation.

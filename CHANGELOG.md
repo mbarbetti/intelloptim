@@ -26,6 +26,10 @@ version is below 1.0, minor releases may contain breaking changes.
   `token.deleted`) lost their token prefix and name to log redaction, because
   the field names contained `token`. The fields are now `key_prefix` and
   `key_name`.
+- `Client.create_study` no longer refuses to join a study that already exists when
+  the caller is at the active-study cap: the server now decides, and only a study
+  it would have to create is refused. `StudyLimitExceededError` is raised from the
+  server's `403` answer instead of from a check made before the request.
 
 ## [0.1.1] - 2026-11-02
 

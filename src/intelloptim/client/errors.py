@@ -13,6 +13,7 @@ An error response from the server is translated by the HTTP status code:
 - ``409`` → :class:`ConfigDigestMismatchError`
 - ``410`` → :class:`StudyStoppedError`
 - ``503`` → :class:`StudyRebuildingError`
+- ``403`` reporting the active-study cap → :class:`StudyLimitExceededError`
 - ``429`` on ``/should_prune`` → :class:`PruneRateLimitError`
 - any other 4xx or 5xx, including ``401`` (invalid token) and ``429`` (quota
   exhausted on the server) → :class:`IntelloptimAPIError`
@@ -23,7 +24,9 @@ Three errors are raised locally, before any request is sent:
 - :class:`InsecureTokenFileError` — the on-disk token file is unsafe to read.
 - :class:`InsufficientQuotaError` — the requested number of trials exceeds the
   remaining call budget.
-- :class:`StudyLimitExceededError` — the active-study cap has been reached.
+
+:class:`StudyLimitExceededError` is the server's refusal to create a study
+because the active-study cap has been reached.
 
 :class:`TrialPruned` is not an error: it is the signal an objective raises to
 stop a trial that the pruner has given up on. It deliberately does not derive
@@ -181,12 +184,13 @@ class InsufficientQuotaError(IntelloptimError):
 
 
 class StudyLimitExceededError(IntelloptimError):
-    """Raised before contacting the server when the study cap is reached.
+    """Raised when the server refuses to create a study at the active-study cap.
 
-    :meth:`~intelloptim.client.Client.create_study` makes this check
-    against the quota snapshot it fetches on first use. Delete an existing
-    study to free a slot, or contact your admin to upgrade your role. The
-    server enforces the same limit independently.
+    :meth:`~intelloptim.client.Client.create_study` raises it when the study does
+    not exist yet and the caller already has the maximum number of active
+    studies. A study that already exists is never refused, so a user at the cap
+    can still start workers on it. Delete an existing study to free a slot, or
+    contact your admin to upgrade your role.
     """
 
 
