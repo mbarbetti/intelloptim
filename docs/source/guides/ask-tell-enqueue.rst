@@ -163,12 +163,15 @@ Every exception raised by the SDK derives from
      - :class:`~intelloptim.client.errors.StudyNotFoundError` or
        :class:`~intelloptim.client.errors.TrialNotFoundError`
      - The study, or the trial told, is unknown to the server.
+   * - 403
+     - :class:`~intelloptim.client.errors.StudyLimitExceededError`
+     - The study does not exist yet and you have reached the cap on active
+       studies. A study that already exists is never refused, so you can always
+       join it.
    * - 401, 429
      - :class:`~intelloptim.client.errors.IntelloptimAPIError`
      - An invalid token, or an exhausted quota; ``status_code`` and ``detail``
        tell which. See :doc:`authentication`.
 
-Two more are raised locally before any request:
-:class:`~intelloptim.client.errors.InsufficientQuotaError`, described above, and
-:class:`~intelloptim.client.errors.StudyLimitExceededError` when you have reached
-the cap on active studies.
+One more is raised locally before any request:
+:class:`~intelloptim.client.errors.InsufficientQuotaError`, described above.

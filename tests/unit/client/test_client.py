@@ -13,7 +13,6 @@ from intelloptim.client.api import Client
 from intelloptim.client.errors import (
     IntelloptimAPIError,
     MissingTokenError,
-    StudyLimitExceededError,
 )
 
 _ME: Dict[str, Any] = {
@@ -123,11 +122,11 @@ class TestCreateStudy:
 
 
 class TestStudyLimit:
-    def test_raises_before_sending_the_study(self, make_client) -> None:
+    def test_a_user_at_the_cap_is_not_blocked_locally(self, make_client) -> None:
+        """The server decides: an existing study can be joined at the cap."""
         client, server = make_client(active_studies=3, max_active_studies=3)
-        with pytest.raises(StudyLimitExceededError):
-            _create(client)
-        assert "/studies/resolve" not in server.paths()
+        _create(client)
+        assert "/studies/resolve" in server.paths()
 
     def test_below_the_cap_is_fine(self, make_client) -> None:
         client, server = make_client(active_studies=2, max_active_studies=3)

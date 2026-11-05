@@ -14,7 +14,7 @@
 [![License](https://img.shields.io/pypi/l/intelloptim.svg)](https://github.com/mbarbetti/intelloptim/blob/main/LICENSE)
 [![CI](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml/badge.svg)](https://github.com/mbarbetti/intelloptim/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/mbarbetti/intelloptim/graph/badge.svg)](https://codecov.io/gh/mbarbetti/intelloptim)
-[![Documentation](https://img.shields.io/readthedocs/intelloptim?logo=read-the-docs)](https://intelloptim.readthedocs.io)
+[![Documentation](https://img.shields.io/readthedocs/intelloptim?logo=read-the-docs)](https://intelloptim.readthedocs.io/en/stable)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23880962.svg)](https://doi.org/10.5281/zenodo.23880962)
 
 Server-orchestrated, data-driven optimization with classical and quantum
@@ -23,7 +23,7 @@ a single study through a coordinating server.
 
 This package is the client SDK and the sampler layer. It talks to an
 intelloptim server over HTTP; the server itself is not part of this package.
-Full documentation: **[intelloptim.readthedocs.io](https://intelloptim.readthedocs.io)**.
+Full documentation: **[intelloptim.readthedocs.io](https://intelloptim.readthedocs.io/en/stable)**.
 
 ## 🌱 Where it comes from
 

@@ -180,24 +180,16 @@ class Client:
             already existed.
 
         Raises:
-            StudyLimitExceededError: If the caller has reached the cap on
-                active studies. This is checked before the study is sent.
-            IntelloptimAPIError: For any error response from the server, such
-                as an invalid token.
+            StudyLimitExceededError: If the study does not exist yet and the
+                server refuses to create it because the caller has reached the
+                cap on active studies. Resolving a study that already exists is
+                never refused, so workers can always join it.
+            IntelloptimAPIError: For any other error response from the server,
+                such as an invalid token.
         """
         from intelloptim.client.study import StudyHandle  # late: cycles
 
-        who = self._fetch_who_am_i()
-        if (
-            who.max_active_studies is not None
-            and who.active_studies >= who.max_active_studies
-        ):
-            raise StudyLimitExceededError(
-                f"Active study limit reached ({who.active_studies}/"
-                f"{who.max_active_studies}). "
-                f"Delete an existing study to free a slot, or contact "
-                f"your admin to upgrade your role."
-            )
+        self._fetch_who_am_i()
 
         request = StudyResolveRequest(
             study_name=study_name,
@@ -311,14 +303,26 @@ class Client:
                 return detail
         return response.text or None
 
+    @staticmethod
+    def _detail_code(response: httpx.Response) -> Optional[str]:
+        """Return the machine-readable ``code`` of an error response, if any."""
+        try:
+            body = response.json()
+        except Exception:  # pragma: no cover - non-JSON error body
+            return None
+        if isinstance(body, dict) and isinstance(body.get("detail"), dict):
+            code = body["detail"].get("code")
+            return code if isinstance(code, str) else None
+        return None
+
     def _raise_for_status(self, response: httpx.Response, *, path: str) -> None:
         """Raise the typed error that matches an HTTP error response.
 
         Does nothing for a successful response. Otherwise the status code
         selects the error: ``404`` is a trial error for a ``/tell`` request
         (its path contains ``/trials/``) and a study error otherwise, ``409``,
-        ``410``, ``503`` and prune-specific ``429`` responses map to dedicated
-        errors, and anything else becomes
+        ``410``, ``503``, a ``403`` that reports the active-study cap and
+        prune-specific ``429`` responses map to dedicated errors, and anything else becomes
         :class:`~intelloptim.client.errors.IntelloptimAPIError`. See
         :mod:`intelloptim.client.errors` for the full mapping.
 
@@ -352,6 +356,11 @@ class Client:
         if code == 409:
             raise ConfigDigestMismatchError(
                 detail or "config_digest does not match stored study"
+            )
+        if code == 403 and self._detail_code(response) == "study_limit_exceeded":
+            raise StudyLimitExceededError(
+                "Active study limit reached. Delete an existing study to free a "
+                "slot, or contact your admin to upgrade your role."
             )
         if code == 410:
             raise StudyStoppedError(detail or "study is stopped")

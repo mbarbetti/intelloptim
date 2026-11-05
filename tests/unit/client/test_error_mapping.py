@@ -13,6 +13,7 @@ from intelloptim.client.errors import (
     IntelloptimAPIError,
     IntelloptimError,
     PruneRateLimitError,
+    StudyLimitExceededError,
     StudyNotFoundError,
     StudyRebuildingError,
     StudyStoppedError,
@@ -176,3 +177,34 @@ def test_unusable_retry_after_is_reported_as_none(
     with pytest.raises(error) as excinfo:
         mock_client._post_json(path, {})
     assert excinfo.value.retry_after_seconds is None
+
+
+def test_403_with_the_study_limit_code_maps_to_study_limit_exceeded(
+    mock_client,
+) -> None:
+    _set(
+        mock_client,
+        lambda req: httpx.Response(
+            403,
+            json={"detail": {"code": "study_limit_exceeded", "active": 3, "max": 3}},
+        ),
+    )
+    with pytest.raises(StudyLimitExceededError, match="Delete an existing study"):
+        mock_client._post_json("/studies/resolve", {})
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"detail": "forbidden"},
+        {"detail": {"code": "something_else"}},
+        {"detail": {"code": 7}},
+        {"other": "shape"},
+    ],
+    ids=["text", "other-code", "non-string-code", "no-detail"],
+)
+def test_other_403_responses_stay_generic_api_errors(mock_client, body) -> None:
+    _set(mock_client, lambda req: httpx.Response(403, json=body))
+    with pytest.raises(IntelloptimAPIError) as excinfo:
+        mock_client._post_json("/studies/resolve", {})
+    assert excinfo.value.status_code == 403
