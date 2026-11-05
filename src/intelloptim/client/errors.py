@@ -13,6 +13,7 @@ An error response from the server is translated by the HTTP status code:
 - ``409`` → :class:`ConfigDigestMismatchError`
 - ``410`` → :class:`StudyStoppedError`
 - ``503`` → :class:`StudyRebuildingError`
+- ``429`` on ``/should_prune`` → :class:`PruneRateLimitError`
 - any other 4xx or 5xx, including ``401`` (invalid token) and ``429`` (quota
   exhausted on the server) → :class:`IntelloptimAPIError`
 
@@ -144,6 +145,30 @@ class StudyRebuildingError(IntelloptimError):
         self.retry_after_seconds = retry_after_seconds
 
 
+class PruneRateLimitError(IntelloptimError):
+    """Raised when pruning requests exceed the server's short-window limit.
+
+    Intermediate values remain buffered on the trial, so callers can continue
+    reporting steps and retry :meth:`~intelloptim.client.Trial.should_prune`
+    after the suggested delay without losing observations.
+
+    Args:
+        message (str): Description of the rate-limit response.
+        retry_after_seconds (Optional[float]): Seconds to wait before retrying,
+            taken from the ``Retry-After`` response header. ``None`` when the
+            server did not provide a valid delay. Defaults to ``None``.
+
+    Attributes:
+        retry_after_seconds (Optional[float]): Suggested wait before retrying.
+    """
+
+    def __init__(
+        self, message: str, retry_after_seconds: Optional[float] = None
+    ) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class InsufficientQuotaError(IntelloptimError):
     """Raised before any trial runs when ``n_trials`` exceeds the call budget.
 
@@ -172,6 +197,7 @@ __all__ = [
     "IntelloptimAPIError",
     "IntelloptimError",
     "MissingTokenError",
+    "PruneRateLimitError",
     "StudyLimitExceededError",
     "StudyNotFoundError",
     "StudyRebuildingError",

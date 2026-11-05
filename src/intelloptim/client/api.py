@@ -39,6 +39,7 @@ from intelloptim.client.auth import resolve_token
 from intelloptim.client.errors import (
     ConfigDigestMismatchError,
     IntelloptimAPIError,
+    PruneRateLimitError,
     StudyLimitExceededError,
     StudyNotFoundError,
     StudyRebuildingError,
@@ -316,8 +317,9 @@ class Client:
         Does nothing for a successful response. Otherwise the status code
         selects the error: ``404`` is a trial error for a ``/tell`` request
         (its path contains ``/trials/``) and a study error otherwise, ``409``,
-        ``410`` and ``503`` map to their dedicated errors, and anything else
-        becomes :class:`~intelloptim.client.errors.IntelloptimAPIError`. See
+        ``410``, ``503`` and prune-specific ``429`` responses map to dedicated
+        errors, and anything else becomes
+        :class:`~intelloptim.client.errors.IntelloptimAPIError`. See
         :mod:`intelloptim.client.errors` for the full mapping.
 
         Args:
@@ -332,6 +334,14 @@ class Client:
             return
         detail = self._detail(response)
         code = response.status_code
+        retry_after_raw = response.headers.get("retry-after")
+        retry_after: Optional[float]
+        try:
+            retry_after = (
+                float(retry_after_raw) if retry_after_raw is not None else None
+            )
+        except ValueError:
+            retry_after = None
 
         if code == 404:
             # ``/tell`` endpoint is the only place 404 means "trial",
@@ -346,16 +356,13 @@ class Client:
         if code == 410:
             raise StudyStoppedError(detail or "study is stopped")
         if code == 503:
-            retry_after_raw = response.headers.get("retry-after")
-            retry_after: Optional[float]
-            try:
-                retry_after = (
-                    float(retry_after_raw) if retry_after_raw is not None else None
-                )
-            except ValueError:
-                retry_after = None
             raise StudyRebuildingError(
                 detail or "study is rebuilding", retry_after_seconds=retry_after
+            )
+        if code == 429 and path.endswith("/should_prune"):
+            raise PruneRateLimitError(
+                detail or "should_prune rate limit exceeded",
+                retry_after_seconds=retry_after,
             )
 
         raise IntelloptimAPIError(code, detail)

@@ -12,6 +12,7 @@ from intelloptim.client.errors import (
     ConfigDigestMismatchError,
     IntelloptimAPIError,
     IntelloptimError,
+    PruneRateLimitError,
     StudyNotFoundError,
     StudyRebuildingError,
     StudyStoppedError,
@@ -91,6 +92,30 @@ def test_503_maps_to_study_rebuilding_with_retry_after(mock_client) -> None:
     assert excinfo.value.retry_after_seconds == 5.0
 
 
+def test_429_on_should_prune_maps_to_rate_limit_error(mock_client) -> None:
+    _set(
+        mock_client,
+        lambda req: httpx.Response(
+            429,
+            json={"detail": "should_prune rate limit exceeded"},
+            headers={"Retry-After": "1"},
+        ),
+    )
+    with pytest.raises(PruneRateLimitError) as excinfo:
+        mock_client._post_json("/studies/suid:x/trials/0/should_prune", {})
+    assert excinfo.value.retry_after_seconds == 1.0
+
+
+def test_429_on_ask_remains_generic_api_error(mock_client) -> None:
+    _set(
+        mock_client,
+        lambda req: httpx.Response(429, json={"detail": "quota exceeded"}),
+    )
+    with pytest.raises(IntelloptimAPIError) as excinfo:
+        mock_client._post_json("/studies/suid:x/ask", {})
+    assert excinfo.value.status_code == 429
+
+
 def test_other_4xx_falls_through_to_api_error(mock_client) -> None:
     _set(
         mock_client,
@@ -118,6 +143,36 @@ def test_error_hierarchy() -> None:
         ConfigDigestMismatchError,
         StudyStoppedError,
         StudyRebuildingError,
+        PruneRateLimitError,
         IntelloptimAPIError,
     ):
         assert issubclass(cls, IntelloptimError), cls.__name__
+
+
+@pytest.mark.parametrize(
+    ("status", "path", "error"),
+    [
+        (503, "/studies/sha256:x/ask", StudyRebuildingError),
+        (429, "/studies/suid:x/trials/0/should_prune", PruneRateLimitError),
+    ],
+)
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"},
+        {"Retry-After": "soon"},
+        {},
+    ],
+    ids=["http-date", "garbage", "absent"],
+)
+def test_unusable_retry_after_is_reported_as_none(
+    mock_client, status: int, path: str, error: type, headers: dict
+) -> None:
+    """A Retry-After that is not a number of seconds must not break the mapping."""
+    _set(
+        mock_client,
+        lambda req: httpx.Response(status, json={"detail": "busy"}, headers=headers),
+    )
+    with pytest.raises(error) as excinfo:
+        mock_client._post_json(path, {})
+    assert excinfo.value.retry_after_seconds is None

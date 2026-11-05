@@ -174,7 +174,8 @@ class Trial:
         request, and the answer is the pruner's decision on all of them. If
         nothing new was reported no request is made and the previous answer
         (``False`` before the first call) is returned. The call does not count
-        against the call quota.
+        against the monthly call quota, but the server permits at most 60
+        pruning requests per minute per API token.
 
         Returns:
             bool: ``True`` if the trial should stop. The usual response is to
@@ -187,6 +188,9 @@ class Trial:
                 is no longer running.
             ConfigDigestMismatchError: If the study configuration on the
                 server differs from this client's.
+            PruneRateLimitError: If pruning is called faster than the server's
+                short-window limit. Keep reporting values locally and retry
+                after ``retry_after_seconds``.
             IntelloptimAPIError: For any other error response.
         """
         pending = {

@@ -53,8 +53,13 @@ What is sent, and what it costs
 ``report`` only stores the value locally. ``should_prune`` sends every value
 reported since its previous call in a single request, and returns the answer for
 all of them. If nothing new was reported it sends nothing. Pruning requests do
-**not** count against your call quota, so checking at every step is fine. Each
-step can be reported once, and values must be finite.
+**not** count against the monthly call quota, but the server limits them to 60
+per minute per API token. Report every step if useful, but check pruning at a
+cadence no faster than once per second; unsent values remain buffered locally.
+Each step can be reported once, and values must be finite. If the server returns
+a rate-limit response, the SDK raises
+:class:`~intelloptim.client.errors.PruneRateLimitError`, whose
+``retry_after_seconds`` attribute tells the caller when to retry.
 
 Choose a pruner
 ---------------

@@ -17,6 +17,10 @@ from intelloptim._internal.audit import (
     quota_exhausted,
     study_access_denied,
     study_created,
+    study_group_sharing_changed,
+    study_share_added,
+    study_share_refused,
+    study_share_removed,
     study_stopped,
     token_authentication_failure,
     token_issued,
@@ -106,6 +110,11 @@ def test_token_helpers(captured) -> None:
         "token.auth_failed",
     }
 
+    issued = next(r for r in rs if r["event"] == "token.issued")
+    assert issued["key_prefix"] == "ABC"
+    assert issued["key_name"] == "ci"
+    assert "[REDACTED]" not in captured.getvalue()
+
 
 def test_study_helpers(captured) -> None:
     study_created(study_id="sha256:1", user_id="u-1", name="toy")
@@ -160,3 +169,28 @@ def test_audit_logger_is_a_distinct_subtree() -> None:
     audit = get_audit_logger()
     assert audit.name == f"{ROOT_LOGGER_NAME}.audit"
     reset_for_tests()
+
+
+def test_study_share_events(captured) -> None:
+    study_share_added(study_id="suid:s", user_id="u-1", grantee="a@example.com")
+    study_share_removed(study_id="suid:s", user_id="u-1", grantee="a@example.com")
+    study_group_sharing_changed(study_id="suid:s", user_id="u-1", enabled=True)
+    added, removed, group = _records(captured)
+    assert (added["event"], added["outcome"], added["actor"]) == (
+        "study.share.added",
+        "success",
+        "u-1",
+    )
+    assert added["grantee"] == "a@example.com" and added["study_id"] == "suid:s"
+    assert removed["event"] == "study.share.removed"
+    assert removed["grantee"] == "a@example.com"
+    assert group["event"] == "study.share.group" and group["enabled"] is True
+
+
+def test_study_share_refused_is_a_warning(captured) -> None:
+    study_share_refused(study_id="suid:s", user_id="u-1", reason="limit-reached")
+    [r] = _records(captured)
+    assert r["event"] == "study.share.refused"
+    assert r["outcome"] == "failure"
+    assert r["level"] == "WARNING"
+    assert r["reason"] == "limit-reached"
