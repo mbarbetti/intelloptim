@@ -1,0 +1,10 @@
+coverage:
+  status:
+    # The share of changed lines that tests must cover for a pull request.
+    patch:
+      default:
+        target: 80%
+    # Whole-project coverage must not drop against the base commit.
+    project:
+      default:
+        target: auto
